@@ -91,6 +91,10 @@ static Format initFormat(Format format) {
       } else if (modeType.getName() == Singleton.getName()) {
         arrayTypes.push_back(Int32);
         arrayTypes.push_back(Int32);
+      } else if (modeType.getName() == RLE.getName()) {
+        arrayTypes.push_back(Int32);
+        arrayTypes.push_back(Int32);
+        arrayTypes.push_back(Int32);
       } else {
         taco_not_supported_yet;
       }

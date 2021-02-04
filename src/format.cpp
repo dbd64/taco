@@ -9,6 +9,7 @@
 #include "taco/lower/mode_format_dense.h"
 #include "taco/lower/mode_format_compressed.h"
 #include "taco/lower/mode_format_singleton.h"
+#include "taco/lower/mode_format_RLE.h"
 
 #include "taco/error.h"
 #include "taco/util/strings.h"
@@ -347,21 +348,25 @@ ModeFormat ModeFormat::Dense(std::make_shared<DenseModeFormat>());
 ModeFormat ModeFormat::Compressed(std::make_shared<CompressedModeFormat>());
 ModeFormat ModeFormat::Sparse = ModeFormat::Compressed;
 ModeFormat ModeFormat::Singleton(std::make_shared<SingletonModeFormat>());
+ModeFormat ModeFormat::RLE(std::make_shared<RLEModeFormat>());
 
 ModeFormat ModeFormat::dense = ModeFormat::Dense;
 ModeFormat ModeFormat::compressed = ModeFormat::Compressed;
 ModeFormat ModeFormat::sparse = ModeFormat::Compressed;
 ModeFormat ModeFormat::singleton = ModeFormat::Singleton;
+ModeFormat ModeFormat::rle = ModeFormat::RLE;
 
 const ModeFormat Dense = ModeFormat::Dense;
 const ModeFormat Compressed = ModeFormat::Compressed;
 const ModeFormat Sparse = ModeFormat::Compressed;
 const ModeFormat Singleton = ModeFormat::Singleton;
+const ModeFormat RLE = ModeFormat::RLE;
 
 const ModeFormat dense = ModeFormat::Dense;
 const ModeFormat compressed = ModeFormat::Compressed;
 const ModeFormat sparse = ModeFormat::Compressed;
 const ModeFormat singleton = ModeFormat::Singleton;
+const ModeFormat rle = ModeFormat::RLE;
 
 const Format CSR({Dense, Sparse}, {0,1});
 const Format CSC({Dense, Sparse}, {1,0});
