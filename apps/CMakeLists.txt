@@ -1,1 +1,2 @@
 add_subdirectory(tensor_times_vector)
+add_subdirectory(rle_example)
