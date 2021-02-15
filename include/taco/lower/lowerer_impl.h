@@ -265,8 +265,11 @@ protected:
   /// Retrieve the coordinate IR variable corresponding to an iterator.
   ir::Expr getCoordinateVar(Iterator) const;
 
+  /// Retrieve the position IR variable corresponding to an index variable.
+  ir::Expr getPositionVar(IndexVar) const;
 
-  /**
+
+    /**
    * Retrieve the resolved coordinate variables of an iterator and it's parent
    * iterators, which are the coordinates after per-iterator coordinates have
    * been merged with the min function.
@@ -280,6 +283,9 @@ protected:
    *       iterator followed by its parent's, its grandparent's, etc.
    */
   std::vector<ir::Expr> coordinates(Iterator iterator) const;
+
+  /// Retrieve only the coordinate variables of the parent iterators
+  std::vector<ir::Expr> parentCoordinates(Iterator iterator) const;
 
   /**
    * Retrieve the resolved coordinate variables of the iterators, which are the
@@ -364,6 +370,8 @@ protected:
           std::vector<Iterator> iterators, std::vector<Iterator> mergers);
 
   ir::Stmt codeToLoadCoordinatesFromPosIterators(std::vector<Iterator> iterators, bool declVars);
+
+  ir::Stmt codeToLoadPositionsFromCoordIterators(std::vector<Iterator> iterators, bool declVars);
 
   /// Create statements to append coordinate to result modes.
   ir::Stmt appendCoordinate(std::vector<Iterator> appenders, ir::Expr coord);

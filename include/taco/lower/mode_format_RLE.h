@@ -28,24 +28,20 @@ namespace taco {
                                      std::vector<ir::Expr> coords,
                                      Mode mode) const override;
 
-//        ModeFunction posIterBounds(ir::Expr parentPos, Mode mode) const override;
-//        ModeFunction posIterAccess(ir::Expr pos, std::vector<ir::Expr> coords,
-//                                   Mode mode) const override;
-//
-//        ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;
-//
-//        ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord,
-//                                Mode mode) const override;
-//        ir::Stmt getAppendEdges(ir::Expr parentPos, ir::Expr posBegin,
-//                                ir::Expr posEnd, Mode mode) const override;
-//        ir::Expr getSize(ir::Expr parentSize, Mode mode) const override;
-//        ir::Stmt getAppendInitEdges(ir::Expr parentPosBegin,
-//                                    ir::Expr parentPosEnd, Mode mode) const override;
-//        ir::Stmt getAppendInitLevel(ir::Expr parentSize, ir::Expr size,
-//                                    Mode mode) const override;
-//        ir::Stmt getAppendFinalizeLevel(ir::Expr parentSize, ir::Expr size,
-//                                        Mode mode) const override;
-//
+        ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;
+
+        ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord,
+                                Mode mode) const override;
+        ir::Stmt getAppendEdges(ir::Expr parentPos, ir::Expr posBegin,
+                                ir::Expr posEnd, Mode mode) const override;
+        ir::Expr getSize(ir::Expr parentSize, Mode mode) const override;
+        ir::Stmt getAppendInitEdges(ir::Expr parentPosBegin,
+                                    ir::Expr parentPosEnd, Mode mode) const override;
+        ir::Stmt getAppendInitLevel(ir::Expr parentSize, ir::Expr size,
+                                    Mode mode) const override;
+        ir::Stmt getAppendFinalizeLevel(ir::Expr parentSize, ir::Expr size,
+                                        Mode mode) const override;
+
         std::vector<ir::Expr> getArrays(ir::Expr tensor, int mode,
                                         int level) const override;
 
@@ -59,6 +55,7 @@ namespace taco {
 
         // Used for appending
         ir::Expr getPosCapacity(Mode mode) const;
+        ir::Expr getRleCapacity(Mode mode) const;
 
         // Variables used to maintain state needed for iteration
         ir::Expr getCurLenVar(Mode mode) const;

@@ -575,6 +575,8 @@ Stmt LowererImpl::lowerForall(Forall forall)
       taco_iassert(iterator.hasCoordIter());
 //      taco_not_supported_yet
       loops = Stmt();
+      loops = lowerForallCoordinate(forall, iterator, locators,
+                                    inserters, appenders, reducedAccesses, recoveryStmt);
     }
   }
   // Emit general loops to merge multiple iterators
@@ -1001,8 +1003,79 @@ Stmt LowererImpl::lowerForallCoordinate(Forall forall, Iterator iterator,
                                         vector<Iterator> appenders,
                                         set<Access> reducedAccesses,
                                         ir::Stmt recoveryStmt) {
-  taco_not_supported_yet;
-  return Stmt();
+  // TODO: Support scheduling
+
+  Expr coordinate = iterator.getCoordVar();//getCoordinateVar(forall.getIndexVar());
+  Expr position = iterator.getPosVar();
+  ModeFunction coordAccess = iterator.coordAccess(parentCoordinates(iterator));
+
+  Stmt declarePosition = Stmt();
+  if (provGraph.isCoordVariable(forall.getIndexVar())) {
+    if (coordAccess[1].as<ir::Literal>() && coordAccess[1].as<ir::Literal>()->getBoolValue()) {
+      declarePosition = VarDecl::make(position, coordAccess[0]);
+    } else {
+      taco_not_supported_yet; // TODO: We only support accesses that must succeed
+    }
+  } else {
+    taco_not_supported_yet; // TODO: I'm not entirely sure why this check is here
+  }
+
+  Stmt coordAccessBlock = Block::blanks(coordAccess.compute(), declarePosition);
+
+  Stmt body = lowerForallBody(coordinate, forall.getStmt(),
+                              locators, inserters, appenders, reducedAccesses);
+  body = Block::make(recoveryStmt, body); // TODO: What is this for?
+
+  // Code to append positions
+  Stmt posAppend = generateAppendPositions(appenders);
+
+  // Code to compute iteration bounds
+  Stmt boundsCompute;
+  Expr startBound, endBound;
+  auto parentCoords = parentCoordinates(iterator);
+  if (!provGraph.isUnderived(iterator.getIndexVar())) {
+    vector<Expr> bounds = provGraph.deriveIterBounds(iterator.getIndexVar(), definedIndexVarsOrdered, underivedBounds, indexVarToExprMap, iterators);
+    startBound = bounds[0];
+    endBound = bounds[1];
+  }
+  else if (iterator.getParent().isRoot() || iterator.getParent().isUnique()) {
+    // E.g. a compressed mode without duplicates
+    ModeFunction bounds = iterator.coordBounds(parentCoords); //posBounds(parentPos);
+    boundsCompute = bounds.compute();
+    startBound = bounds[0];
+    endBound = bounds[1];
+  } else {
+    taco_iassert(iterator.isOrdered() && iterator.getParent().isOrdered());
+    taco_iassert(iterator.isCompact() && iterator.getParent().isCompact());
+
+    taco_not_supported_yet; // TODO: I'm not entirely sure what this is for
+
+//    // E.g. a compressed mode with duplicates. Apply iterator chaining
+//    Expr parentSegend = iterator.getParent().getSegendVar();
+//    ModeFunction startBounds = iterator.posBounds(parentPos);
+//    ModeFunction endBounds = iterator.posBounds(ir::Sub::make(parentSegend, 1));
+//    boundsCompute = Block::make(startBounds.compute(), endBounds.compute());
+//    startBound = startBounds[0];
+//    endBound = endBounds[1];
+  }
+
+  LoopKind kind = LoopKind::Serial;
+  if (forall.getParallelUnit() == ParallelUnit::CPUVector && !ignoreVectorize) {
+    kind = LoopKind::Vectorized;
+  }
+  else if (forall.getParallelUnit() != ParallelUnit::NotParallel
+           && forall.getOutputRaceStrategy() != OutputRaceStrategy::ParallelReduction && !ignoreVectorize) {
+    kind = LoopKind::Runtime;
+  }
+
+  // Loop with preamble and postamble
+  auto retVal = Block::blanks(boundsCompute,
+                              For::make(iterator.getCoordVar(), startBound, endBound, 1,
+                                        Block::make(coordAccessBlock, body),
+                                        kind,
+                                        ignoreVectorize ? ParallelUnit::NotParallel : forall.getParallelUnit(), ignoreVectorize ? 0 : forall.getUnrollFactor()),
+                              posAppend);
+  return retVal;
 }
 
 Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
@@ -1314,6 +1387,7 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
 
   // Load coordinates from position iterators
   Stmt loadPosIterCoordinates = codeToLoadCoordinatesFromPosIterators(iterators, !resolvedCoordDeclared);
+  Stmt loadCoordIterPositions = codeToLoadPositionsFromCoordIterators(iterators, !resolvedCoordDeclared);
 
   // Merge iterator coordinate variables
   Stmt resolvedCoordinate = resolveCoordinate(mergers, coordinate, !resolvedCoordDeclared);
@@ -1338,6 +1412,7 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
   /// While loop over rangers
   return While::make(checkThatNoneAreExhausted(rangers),
                      Block::make(loadPosIterCoordinates,
+                                 loadCoordIterPositions,
                                  resolvedCoordinate,
                                  loadLocatorPosVars,
                                  deduplicationLoops,
@@ -1368,6 +1443,17 @@ Stmt LowererImpl::resolveCoordinate(std::vector<Iterator> mergers, ir::Expr coor
     else if (merger.hasCoordIter()) {
       taco_not_supported_yet;
       return Stmt();
+      ModeFunction coordAccess = merger.coordAccess(parentCoordinates(merger));
+      // TODO: This does not check whether the value was found
+      Stmt posResolution = emitVarDecl ? VarDecl::make(merger.getPosVar(), coordAccess[0]) :
+                                         Assign::make(merger.getPosVar(), coordAccess[0]);
+
+      Stmt coordResolution = emitVarDecl ? VarDecl::make(coordinate, merger.getCoordVar()) :
+                                           Assign::make(coordinate, merger.getCoordVar());
+
+      return Block::make(coordAccess.compute(),
+                         posResolution,
+                         coordResolution);
     }
     else if (merger.isDimensionIterator()) {
       // Just one dimension iterator so resolved coordinate already exist and we
@@ -1945,6 +2031,9 @@ Expr LowererImpl::getCoordinateVar(IndexVar indexVar) const {
   return this->iterators.modeIterator(indexVar).getCoordVar();
 }
 
+Expr LowererImpl::getPositionVar(IndexVar indexVar) const {
+  return this->iterators.modeIterator(indexVar).getPosVar();
+}
 
 Expr LowererImpl::getCoordinateVar(Iterator iterator) const {
   if (iterator.isDimensionIterator()) {
@@ -1964,6 +2053,12 @@ vector<Expr> LowererImpl::coordinates(Iterator iterator) const {
   } while (!iterator.isRoot());
   auto reverse = util::reverse(coords);
   return vector<Expr>(reverse.begin(), reverse.end());
+}
+
+vector<Expr> LowererImpl::parentCoordinates(Iterator iterator) const {
+  auto result = coordinates(iterator);
+  result.pop_back(); // We do not want to include the current coordinate
+  return result;
 }
 
 vector<Expr> LowererImpl::coordinates(vector<Iterator> iterators)
@@ -2285,7 +2380,7 @@ Stmt LowererImpl::resizeAndInitValues(const std::vector<Iterator>& appenders,
     Expr tensor = appender.getTensor(); 
     Expr values = GetProperty::make(tensor, TensorProperty::Values);
     Expr capacity = getCapacityVar(appender.getTensor());
-    Expr pos = appender.getIteratorVar();
+    Expr pos = appender.getPosVar();
 
     if (generateAssembleCode()) {
       result.push_back(doubleSizeIfFull(values, capacity, pos));
@@ -2486,6 +2581,7 @@ Stmt LowererImpl::codeToInitializeIteratorVar(Iterator iterator, vector<Iterator
   }
   else if (iterator.hasCoordIter()) {
     // E.g. a hasmap mode
+    // E.g. a hashmap mode
     vector<Expr> coords = coordinates(iterator);
     coords.erase(coords.begin());
     ModeFunction bounds = iterator.coordBounds(coords);
@@ -2651,6 +2747,29 @@ Stmt LowererImpl::codeToLoadCoordinatesFromPosIterators(vector<Iterator> iterato
   return loadPosIterCoordinates;
 }
 
+
+Stmt LowererImpl::codeToLoadPositionsFromCoordIterators(vector<Iterator> iterators, bool declVars) {
+  Stmt loads;
+  if(iterators.size() > 1) {
+    vector<Stmt> blockInstrs;
+    auto coordIters = filter(iterators, [](Iterator it) { return it.hasCoordIter(); });
+    for (auto &coordIter : coordIters) {
+      taco_tassert(coordIter.hasCoordIter());
+      ModeFunction coordAccess = coordIter.coordAccess(coordinates(coordIter));
+      blockInstrs.push_back(coordAccess.compute());
+      // TODO: This assumes that the access function always succeeds
+      if (declVars) {
+        blockInstrs.push_back(VarDecl::make(coordIter.getPosVar(),
+                                            coordAccess[0]));
+      } else {
+        blockInstrs.push_back(Assign::make(coordIter.getPosVar(),
+                                           coordAccess[0]));
+      }
+    }
+    return Block::make(blockInstrs);
+  }
+  return Stmt();
+}
 
 static
 bool isLastAppender(Iterator iter) {

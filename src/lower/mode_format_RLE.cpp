@@ -2,15 +2,13 @@
 // Created by Daniel Donenfeld on 1/24/21.
 //
 
-// I THINK WE NEED TO DO COORDINATE ITERATION
-// Each position in the vals array may correspond
-// to more than one coordinate. If we instead iterate
-// over the coordinates we can return the same
-// position multiple times.
-// TODO: How can I maintain state iteration?
-//   - I think I can initialize state in the coord_bounds function, but I need to test this
-//   - We should only need the pos array, the data can be stored entirely in the vals array.
-//       - TODO: I will need to see how this interacts with other level formats though (and itself)
+// TODO:
+//  - Use better format for storing RLE lengths, maybe packbits except use type size for code
+//    - We could use a byte for code and reinterpret it to mean type size elements instead of bytes
+//      however this could cause issues indexing into vals array (due to taco not expecting this and
+//      performance issues from unaligned accesses)
+//  - Implement Append functionality
+//  - Add support for merging
 
 #include "../../include/taco/lower/mode_format_RLE.h"
 
@@ -29,7 +27,7 @@ namespace taco {
     }
 
     RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, long long allocSize) :
-            ModeFormatImpl("rle", isFull, true, isUnique, false, true,
+            ModeFormatImpl("rle", isFull, true, isUnique, false, true, false,
                            true, false, false, false, true),
             allocSize(allocSize) {
     }
@@ -68,7 +66,7 @@ namespace taco {
                 GetProperty::make(tensor, TensorProperty::Indices,
                                   level - 1, 0, arraysName + "_pos"),
                 GetProperty::make(tensor, TensorProperty::Indices,
-                                  level - 1, 0, arraysName + "_rle")};
+                                  level - 1, 1, arraysName + "_rle")};
     }
 
     Expr RLEModeFormat::getSizeArray(ModePack pack) const {
@@ -95,6 +93,18 @@ namespace taco {
         return mode.getVar(varName);
     }
 
+    Expr RLEModeFormat::getRleCapacity(Mode mode) const {
+      const std::string varName = mode.getName() + "_rle_size";
+
+      if (!mode.hasVar(varName)) {
+        Expr posCapacity = Var::make(varName, Int());
+        mode.addVar(varName, posCapacity);
+        return posCapacity;
+      }
+
+      return mode.getVar(varName);
+    }
+
     Expr RLEModeFormat::getWidth(Mode mode) const {
         return (mode.getSize().isFixed() && mode.getSize().getSize() < 16) ?
                (int)mode.getSize().getSize() :
@@ -108,12 +118,15 @@ namespace taco {
     }
 
     ModeFunction RLEModeFormat::coordIterBounds(std::vector<ir::Expr> parentCoords, Mode mode) const {
-        Stmt curLenDecl = VarDecl::make(getCurLenVar(mode),0);
-        Stmt indexDecl = VarDecl::make(getIndexVar(mode),0);
-        return ModeFunction(Block::make(curLenDecl, indexDecl), {0, getWidth(mode)});
+      ir::Expr coord = parentCoords.empty() ? 0 : parentCoords.back();
+      Stmt indexDecl = VarDecl::make(getIndexVar(mode),Load::make(getPosArray(mode.getModePack()), coord));
+      Stmt curLenDecl = VarDecl::make(getCurLenVar(mode),Load::make(getRleArray(mode.getModePack()), getIndexVar(mode)));
+      return ModeFunction(Block::make(indexDecl, curLenDecl), {0, getWidth(mode)});
     }
 
     ModeFunction RLEModeFormat::coordIterAccess(ir::Expr parentPos, std::vector<ir::Expr> coords, Mode mode) const {
+        // TODO: This assumes that we always access the next coordinate, I think that will always be fine
+        //   as this level format stores values for every coordinate
         std::vector<Stmt> stmts{};
 
         // We need to decrement the current length
@@ -129,6 +142,7 @@ namespace taco {
             Assign::make(getCurLenVar(mode),Load::make(getRleArray(mode.getModePack()),getIndexVar(mode)))
                                     );
         Stmt ifStmt = IfThenElse::make({Eq::make(getCurLenVar(mode), 0)},thenBlock);
+        stmts.push_back(ifStmt);
 
         return ModeFunction(Block::make(stmts), {pVar, true});
     }
@@ -156,5 +170,140 @@ namespace taco {
 
         return mode.getVar(indexVar);
     }
+
+    ModeFunction RLEModeFormat::coordBounds(ir::Expr parentPos, Mode mode) const {
+      return ModeFunction(Comment::make("Call to RLEModeFormat::coordBounds!"), {0, getWidth(mode)});
+    }
+
+    ir::Stmt RLEModeFormat::getAppendCoord(ir::Expr pos, ir::Expr coord, Mode mode) const {
+      taco_iassert(mode.getPackLocation() == 0);
+
+      Stmt c0 = Comment::make("--Call to RLEModeFormat::getAppendCoord!   --");
+      Stmt c1 = Comment::make("--End call to RLEModeFormat::getAppendCoord--");
+
+      Expr rleArray = getRleArray(mode.getModePack());
+      Expr stride = (int)mode.getModePack().getNumModes();
+      Stmt storeIdx = Store::make(rleArray, Mul::make(pos, stride), 1); // Right now every new value has a run length of 1
+
+      if (mode.getModePack().getNumModes() > 1) {
+        return storeIdx;
+      }
+
+      Stmt maybeResizeIdx = doubleSizeIfFull(rleArray, getRleCapacity(mode), pos);
+      return Block::make({c0,maybeResizeIdx, storeIdx, c1});
+    }
+
+    ir::Stmt RLEModeFormat::getAppendEdges(ir::Expr parentPos, ir::Expr posBegin, ir::Expr posEnd, Mode mode) const {
+      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendEdges!    --");
+      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendEdges --");
+
+
+      Expr posArray = getPosArray(mode.getModePack());
+      ModeFormat parentModeType = mode.getParentModeType();
+      Expr edges = (!parentModeType.defined() || parentModeType.hasAppend())
+                   ? posEnd : Sub::make(posEnd, posBegin);
+      Stmt store = Store::make(posArray, Add::make(parentPos, 1), edges);
+
+      return Block::make(c0,store,c1);
+    }
+
+    ir::Expr RLEModeFormat::getSize(ir::Expr parentSize, Mode mode) const {
+      return Load::make(getPosArray(mode.getModePack()), parentSize); // TODO: I don't think this is right
+    }
+
+    ir::Stmt RLEModeFormat::getAppendInitEdges(ir::Expr parentPosBegin, ir::Expr parentPosEnd, Mode mode) const {
+
+      if (isa<Literal>(parentPosBegin)) {
+        taco_iassert(to<Literal>(parentPosBegin)->equalsScalar(0));
+        Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges (literal case)!    --");
+        Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges (literal case) --");
+
+        return Block::make(c0,c1);
+      }
+
+      Expr posArray = getPosArray(mode.getModePack());
+      Expr posCapacity = getPosCapacity(mode);
+      ModeFormat parentModeType = mode.getParentModeType();
+      if (!parentModeType.defined() || parentModeType.hasAppend()) {
+        Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges (parent append)!    --");
+        Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges (parent append) --");
+
+        return Block::make(c0,doubleSizeIfFull(posArray, posCapacity, parentPosEnd),c1);
+      }
+
+      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges!    --");
+      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges --");
+
+      Expr pVar = Var::make("p" + mode.getName(), Int());
+      Expr lb = Add::make(parentPosBegin, 1);
+      Expr ub = Add::make(parentPosEnd, 1);
+      Stmt initPos = For::make(pVar, lb, ub, 1, Store::make(posArray, pVar, 0));
+      Stmt maybeResizePos = atLeastDoubleSizeIfFull(posArray, posCapacity, parentPosEnd);
+      return Block::make({c0, maybeResizePos, initPos, c1});
+    }
+
+    ir::Stmt RLEModeFormat::getAppendInitLevel(ir::Expr parentSize, ir::Expr size, Mode mode) const {
+      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitLevel!    --");
+      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitLevel --");
+
+      const bool szPrevIsZero = isa<Literal>(parentSize) &&
+                                to<Literal>(parentSize)->equalsScalar(0);
+
+      Expr defaultCapacity = Literal::make(allocSize, Datatype::Int32);
+      Expr posArray = getPosArray(mode.getModePack());
+      Expr initCapacity = szPrevIsZero ? defaultCapacity : Add::make(parentSize, 1);
+      Expr posCapacity = initCapacity;
+
+      std::vector<Stmt> initStmts;
+      initStmts.push_back(c0);
+      if (szPrevIsZero) {
+        posCapacity = getPosCapacity(mode);
+        initStmts.push_back(VarDecl::make(posCapacity, initCapacity));
+      }
+      initStmts.push_back(Allocate::make(posArray, posCapacity));
+      initStmts.push_back(Store::make(posArray, 0, 0));
+
+      if (mode.getParentModeType().defined() &&
+          !mode.getParentModeType().hasAppend() && !szPrevIsZero) {
+        Expr pVar = Var::make("p" + mode.getName(), Int());
+        Stmt storePos = Store::make(posArray, pVar, 0);
+        initStmts.push_back(For::make(pVar, 1, initCapacity, 1, storePos));
+      }
+
+      if (mode.getPackLocation() == (mode.getModePack().getNumModes() - 1)) {
+        Expr rleCapacity = getRleCapacity(mode);
+        Expr rleArray = getRleArray(mode.getModePack());
+        initStmts.push_back(VarDecl::make(rleCapacity, defaultCapacity));
+        initStmts.push_back(Allocate::make(rleArray, rleCapacity));
+      }
+
+      initStmts.push_back(c1);
+      return Block::make(initStmts);
+    }
+
+    ir::Stmt RLEModeFormat::getAppendFinalizeLevel(ir::Expr parentSize, ir::Expr size, Mode mode) const {
+      ModeFormat parentModeType = mode.getParentModeType();
+      if ((isa<Literal>(parentSize) && to<Literal>(parentSize)->equalsScalar(1)) ||
+          !parentModeType.defined() || parentModeType.hasAppend()) {
+        return Stmt();
+      }
+
+      Expr csVar = Var::make("cs" + mode.getName(), Int());
+      Stmt initCs = VarDecl::make(csVar, 0);
+
+      Expr pVar = Var::make("p" + mode.getName(), Int());
+      Expr loadPos = Load::make(getPosArray(mode.getModePack()), pVar);
+      Stmt incCs = Assign::make(csVar, Add::make(csVar, loadPos));
+      Stmt updatePos = Store::make(getPosArray(mode.getModePack()), pVar, csVar);
+      Stmt body = Block::make({incCs, updatePos});
+      Stmt finalizeLoop = For::make(pVar, 1, Add::make(parentSize, 1), 1, body);
+
+      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendFinalizeLevel!    --");
+      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendFinalizeLevel --");
+
+
+      return Block::make({c0, initCs, finalizeLoop, c1});
+    }
+
 
 }

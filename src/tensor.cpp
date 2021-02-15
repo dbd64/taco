@@ -271,6 +271,13 @@ static size_t unpackTensorData(const taco_tensor_t& tensorData,
     } else if (modeType.getName() == Singleton.getName()) {
       Array idx = Array(type<int>(), tensorData.indices[i][1], numVals, Array::UserOwns);
       modeIndices.push_back(ModeIndex({makeArray(type<int>(), 0), idx}));
+    } else if (modeType.getName() == RLE.getName()) {
+      auto valsSize = ((int*)tensorData.indices[i][0])[numVals];
+      Array size = makeArray({valsSize}); // TODO: This is wrong
+      Array pos = Array(type<int>(), tensorData.indices[i][0], numVals+1, Array::UserOwns);
+      Array rle = Array(type<int>(), tensorData.indices[i][1], valsSize, Array::UserOwns);
+      modeIndices.push_back(ModeIndex({size, pos, rle}));
+      numVals = valsSize;
     } else {
       taco_not_supported_yet;
     }

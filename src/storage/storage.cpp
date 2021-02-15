@@ -158,6 +158,16 @@ TensorStorage::operator struct taco_tensor_t*() const {
         tensorData->indices[i][1] = (uint8_t*)idx.getData();
       }
     }
+    else if (modeType.getName() == RLE.getName()) {
+      if (modeIndex.numIndexArrays() > 0) {
+        const Array& size = modeIndex.getIndexArray(0);
+        const Array& pos = modeIndex.getIndexArray(1);
+        const Array& rle = modeIndex.getIndexArray(2);
+        tensorData->dimensions[0] = ((int32_t*)size.getData())[0];
+        tensorData->indices[i][0] = (uint8_t*)pos.getData();
+        tensorData->indices[i][1] = (uint8_t*)rle.getData();
+      }
+    }
     else {
       taco_not_supported_yet;
     }
