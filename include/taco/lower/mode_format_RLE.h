@@ -13,9 +13,12 @@ namespace taco {
     public:
         RLEModeFormat();
         RLEModeFormat(bool isFull, bool isUnique,
+                      bool includeComments = false,
                       long long allocSize = DEFAULT_ALLOC_SIZE);
 
         ~RLEModeFormat() override {}
+
+        bool includeComments;
 
         ModeFormat copy(std::vector<ModeFormat::Property> properties) const override;
 

@@ -26,10 +26,11 @@ namespace taco {
         RLEModeFormat(false, true) {
     }
 
-    RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, long long allocSize) :
+    RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, bool includeComments, long long allocSize) :
             ModeFormatImpl("rle", isFull, true, isUnique, false, true, false,
                            true, false, false, false, true),
-            allocSize(allocSize) {
+            allocSize(allocSize),
+            includeComments(includeComments) {
     }
 
     ModeFormat RLEModeFormat::copy(
@@ -172,14 +173,15 @@ namespace taco {
     }
 
     ModeFunction RLEModeFormat::coordBounds(ir::Expr parentPos, Mode mode) const {
-      return ModeFunction(Comment::make("Call to RLEModeFormat::coordBounds!"), {0, getWidth(mode)});
+      Stmt comment = includeComments ? Comment::make("Call to RLEModeFormat::coordBounds!") : Stmt();
+      return ModeFunction(comment, {0, getWidth(mode)});
     }
 
     ir::Stmt RLEModeFormat::getAppendCoord(ir::Expr pos, ir::Expr coord, Mode mode) const {
       taco_iassert(mode.getPackLocation() == 0);
 
-      Stmt c0 = Comment::make("--Call to RLEModeFormat::getAppendCoord!   --");
-      Stmt c1 = Comment::make("--End call to RLEModeFormat::getAppendCoord--");
+      Stmt c0 = includeComments ? Comment::make("--Call to RLEModeFormat::getAppendCoord!   --") : Stmt();
+      Stmt c1 = includeComments ? Comment::make("--End call to RLEModeFormat::getAppendCoord--") : Stmt();
 
       Expr rleArray = getRleArray(mode.getModePack());
       Expr stride = (int)mode.getModePack().getNumModes();
@@ -194,8 +196,8 @@ namespace taco {
     }
 
     ir::Stmt RLEModeFormat::getAppendEdges(ir::Expr parentPos, ir::Expr posBegin, ir::Expr posEnd, Mode mode) const {
-      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendEdges!    --");
-      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendEdges --");
+      Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendEdges!    --") : Stmt();
+      Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendEdges --") : Stmt();
 
 
       Expr posArray = getPosArray(mode.getModePack());
@@ -215,24 +217,27 @@ namespace taco {
 
       if (isa<Literal>(parentPosBegin)) {
         taco_iassert(to<Literal>(parentPosBegin)->equalsScalar(0));
-        Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges (literal case)!    --");
-        Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges (literal case) --");
-
-        return Block::make(c0,c1);
+        if(includeComments) {
+          Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges (literal case)!    --");
+          Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges (literal case) --");
+          return Block::make(c0, c1);
+        } else {
+          return Stmt();
+        }
       }
 
       Expr posArray = getPosArray(mode.getModePack());
       Expr posCapacity = getPosCapacity(mode);
       ModeFormat parentModeType = mode.getParentModeType();
       if (!parentModeType.defined() || parentModeType.hasAppend()) {
-        Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges (parent append)!    --");
-        Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges (parent append) --");
+        Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendInitEdges (parent append)!    --") : Stmt();
+        Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendInitEdges (parent append) --") : Stmt();
 
         return Block::make(c0,doubleSizeIfFull(posArray, posCapacity, parentPosEnd),c1);
       }
 
-      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges!    --");
-      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges --");
+      Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendInitEdges!    --") : Stmt();
+      Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendInitEdges --") : Stmt();
 
       Expr pVar = Var::make("p" + mode.getName(), Int());
       Expr lb = Add::make(parentPosBegin, 1);
@@ -243,8 +248,8 @@ namespace taco {
     }
 
     ir::Stmt RLEModeFormat::getAppendInitLevel(ir::Expr parentSize, ir::Expr size, Mode mode) const {
-      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitLevel!    --");
-      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitLevel --");
+      Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendInitLevel!    --") : Stmt();
+      Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendInitLevel --") : Stmt();
 
       const bool szPrevIsZero = isa<Literal>(parentSize) &&
                                 to<Literal>(parentSize)->equalsScalar(0);
@@ -298,9 +303,8 @@ namespace taco {
       Stmt body = Block::make({incCs, updatePos});
       Stmt finalizeLoop = For::make(pVar, 1, Add::make(parentSize, 1), 1, body);
 
-      Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendFinalizeLevel!    --");
-      Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendFinalizeLevel --");
-
+      Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendFinalizeLevel!    --") : Stmt();
+      Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendFinalizeLevel --") : Stmt();
 
       return Block::make({c0, initCs, finalizeLoop, c1});
     }
