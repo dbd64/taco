@@ -31,6 +31,7 @@ enum class IRNodeType {
   Rem,
   Min,
   Max,
+  Lcm,
   BitAnd,
   BitOr,
   Not,
@@ -154,6 +155,11 @@ struct IRHandle : public util::IntrusivePtr<const IRNode> {
   }
 };
 
+class Stmt;
+class Expr;
+std::ostream &operator<<(std::ostream &os, const Stmt &);
+std::ostream &operator<<(std::ostream &os, const Expr &);
+
 /** An expression. */
 class Expr : public IRHandle {
 public:
@@ -179,6 +185,10 @@ public:
   Datatype type() const {
     return ((const BaseExprNode *)ptr)->type;
   }
+
+  void print(){
+    operator<<(std::cout, *this) << std::endl;
+  }
 };
 
 /** This is a custom comparator that allows
@@ -194,10 +204,12 @@ class Stmt : public IRHandle {
 public:
   Stmt() : IRHandle() {}
   Stmt(const BaseStmtNode* stmt) : IRHandle(stmt) {}
+
+  void print(){
+    operator<<(std::cout, *this) << std::endl;
+  }
 };
 
-std::ostream &operator<<(std::ostream &os, const Stmt &);
-std::ostream &operator<<(std::ostream &os, const Expr &);
 
 // Actual nodes start here
 
@@ -360,6 +372,18 @@ struct Max : public ExprNode<Max> {
   static Expr make(std::vector<Expr> operands, Datatype type);
 
   static const IRNodeType _type_info = IRNodeType::Max;
+};
+
+/** LCM of two values. */
+struct Lcm : public ExprNode<Lcm> {
+    std::vector<Expr> operands;
+
+    static Expr make(Expr a, Expr b);
+    static Expr make(Expr a, Expr b, Datatype type);
+    static Expr make(std::vector<Expr> operands);
+    static Expr make(std::vector<Expr> operands, Datatype type);
+
+    static const IRNodeType _type_info = IRNodeType::Lcm;
 };
 
 /** Bitwise and: a & b */

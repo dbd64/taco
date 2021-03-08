@@ -278,6 +278,12 @@ bool ModeFormat::hasAppend() const {
   return impl->hasAppend;
 }
 
+bool ModeFormat::hasRepeatIter() const {
+  taco_iassert(defined());
+  return impl->hasRepeatIter;
+}
+
+
 bool ModeFormat::defined() const {
   return impl != nullptr;
 }

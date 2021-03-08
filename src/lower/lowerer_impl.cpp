@@ -1,4 +1,4 @@
-#include <taco/lower/mode_format_compressed.h>
+#include "taco/lower/mode_format_compressed.h"
 #include "taco/lower/lowerer_impl.h"
 
 #include "taco/index_notation/index_notation.h"
@@ -27,6 +27,10 @@ public:
     impl->accessibleIterators.scope();
     IndexStmtVisitorStrict::visit(stmt);
     impl->accessibleIterators.unscope();
+
+//    std::cout << "IndexStmt: " << stmt << std::endl
+//              << "To Stmt: " <<std::endl << this->stmt << std::endl;
+
     return this->stmt;
   }
   Expr lower(IndexExpr expr) {
@@ -570,13 +574,19 @@ Stmt LowererImpl::lowerForall(Forall forall)
       loops = lowerForallPosition(forall, iterator, locators,
                                     inserters, appenders, reducedAccesses, recoveryStmt);
     }
+    // Emit repeat iteration loops
+    else if (iterator.hasRepeatIter()){
+      loops = lowerForallRepeat(forall, iterator, locators,
+                                    inserters, appenders, reducedAccesses, recoveryStmt);
+    }
     // Emit coordinate iteration loop
-    else {
-      taco_iassert(iterator.hasCoordIter());
-//      taco_not_supported_yet
-      loops = Stmt();
+    else if (iterator.hasCoordIter()){
       loops = lowerForallCoordinate(forall, iterator, locators,
                                     inserters, appenders, reducedAccesses, recoveryStmt);
+    }
+    // Above cases Should be exhaustive
+    else {
+      taco_unreachable;
     }
   }
   // Emit general loops to merge multiple iterators
@@ -997,6 +1007,124 @@ Stmt LowererImpl::lowerForallDimension(Forall forall,
                                          posAppend);
   }
 
+ir::Expr getPosOffVar(Mode mode) {
+  const std::string varName = mode.getName() + "_pos_off";
+
+  if (!mode.hasVar(varName)) {
+    Expr var = Var::make(varName, Int());
+    mode.addVar(varName, var);
+    return var;
+  }
+
+  return mode.getVar(varName);
+}
+
+ir::Expr getPosSaveVar(Mode mode) {
+  const std::string varName = mode.getName() + "_pos_save";
+
+  if (!mode.hasVar(varName)) {
+    Expr var = Var::make(varName, Int());
+    mode.addVar(varName, var);
+    return var;
+  }
+
+  return mode.getVar(varName);
+}
+
+ir::Expr getRepeatIterVar(Mode mode) {
+  const std::string varName = mode.getName() + "_rep_iter";
+
+  if (!mode.hasVar(varName)) {
+    Expr var = Var::make(varName, Int());
+    mode.addVar(varName, var);
+    return var;
+  }
+
+  return mode.getVar(varName);
+}
+
+Stmt LowererImpl::lowerForallRepeat(Forall forall, Iterator iterator,
+                                        vector<Iterator> locators,
+                                        vector<Iterator> inserters,
+                                        vector<Iterator> appenders,
+                                        set<Access> reducedAccesses,
+                                        ir::Stmt recoveryStmt) {
+    // TODO: Support scheduling, windowing
+    if (iterator.isWindowed()) {
+      taco_not_supported_yet;
+    }
+
+    // Setup variable for coordinate. Repeat access implies a dense level, however the access
+    // Function does not return the coordinate. (This can be changed later, as there is no
+    // fundamental limitation against mixing sparse and compressed for a single level)
+    Expr coordinate = getCoordinateVar(forall.getIndexVar());
+    Stmt declareCoordinate = VarDecl::make(coordinate, 0);
+
+    // This is the variable iterated over in the outer loop
+    Expr position = iterator.getPosVar();
+
+    // Read code from repeat access
+    ModeFunction repeatAccess = iterator.repeatAccess(position, coordinates(iterator));
+    Stmt accessCompute = repeatAccess.compute();
+    Expr positionStart = repeatAccess[0];
+    Expr length        = repeatAccess[1];
+    Expr count         = repeatAccess[2];
+    taco_iassert(repeatAccess[3].as<ir::Literal>() && repeatAccess[3].as<ir::Literal>()->getBoolValue());
+
+    Expr posOff = getPosOffVar(iterator.getMode());
+    Stmt posOffDecl = VarDecl::make(posOff, 0);
+
+    Expr posSave = getPosSaveVar(iterator.getMode());
+    Stmt posSaveDecl = VarDecl::make(posSave, position);
+
+    Stmt posOffUpdate = Assign::make(posOff, Rem::make(ir::Add::make(posOff, 1), length));
+    Stmt calcPos = Assign::make(position, ir::Add::make(posSave, posOff));
+
+    // This is the innermost statement implementing the operation on tensor elements
+    Stmt body = lowerForallBody(coordinate, forall.getStmt(),
+                                locators, inserters, appenders, reducedAccesses);
+    body = Block::make(recoveryStmt, body);
+
+    // Code to append positions
+    Stmt posAppend = generateAppendPositions(appenders);
+
+    Stmt coordIncr = Assign::make(coordinate, ir::Add::make(coordinate,1));
+
+    Stmt posRestore = Assign::make(position, posSave);
+
+    Stmt innerLoop = Block::make(
+            posOffDecl, posSaveDecl,
+          For::make(getRepeatIterVar(iterator.getMode()), 0, count, 1,
+                      Block::make(posOffUpdate, calcPos, body, posAppend, coordIncr)),
+            posRestore
+            );
+
+
+    // Generate code for the outer position loop
+    Stmt boundsCompute;
+    Expr startBound, endBound;
+    Expr parentPos = iterator.getParent().getPosVar();
+    if (!provGraph.isUnderived(iterator.getIndexVar())) {
+      vector<Expr> bounds = provGraph.deriveIterBounds(iterator.getIndexVar(), definedIndexVarsOrdered, underivedBounds, indexVarToExprMap, iterators);
+      startBound = bounds[0];
+      endBound = bounds[1];
+    }
+    else if (iterator.getParent().isRoot() || iterator.getParent().isUnique()) {
+      // E.g. a compressed mode without duplicates
+      ModeFunction bounds = iterator.repeatBounds(parentPos);
+      boundsCompute = bounds.compute();
+      startBound = bounds[0];
+      endBound = bounds[1];
+    } else {
+      taco_not_supported_yet;
+    }
+
+    // Loop with preamble and postamble
+    Stmt outerLoop = Block::blanks(declareCoordinate, boundsCompute, For::make(position, startBound, endBound, 1, innerLoop));
+    return outerLoop;
+}
+
+
 Stmt LowererImpl::lowerForallCoordinate(Forall forall, Iterator iterator,
                                         vector<Iterator> locators,
                                         vector<Iterator> inserters,
@@ -1071,10 +1199,10 @@ Stmt LowererImpl::lowerForallCoordinate(Forall forall, Iterator iterator,
   // Loop with preamble and postamble
   auto retVal = Block::blanks(boundsCompute,
                               For::make(iterator.getCoordVar(), startBound, endBound, 1,
-                                        Block::make(coordAccessBlock, body),
+                                        Block::make(coordAccessBlock, VarDecl::make(getCoordinateVar(forall.getIndexVar()), coordinate), body),
                                         kind,
                                         ignoreVectorize ? ParallelUnit::NotParallel : forall.getParallelUnit(), ignoreVectorize ? 0 : forall.getUnrollFactor()),
-                              posAppend);
+                                    posAppend);
   return retVal;
 }
 
@@ -1165,7 +1293,6 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
                                  kind,
                                  ignoreVectorize ? ParallelUnit::NotParallel : forall.getParallelUnit(), ignoreVectorize ? 0 : forall.getUnrollFactor()),
                        posAppend);
-
 }
 
 Stmt LowererImpl::lowerForallFusedPosition(Forall forall, Iterator iterator,
@@ -1340,7 +1467,8 @@ Stmt LowererImpl::lowerMergeLattice(MergeLattice lattice, IndexVar coordinateVar
   vector<Iterator> appenders = filter(lattice.results(),
                                       [](Iterator it){return it.hasAppend();});
 
-  vector<Iterator> mergers = lattice.points()[0].mergers();
+  vector<Iterator> mergers =lattice.points()[0].mergers();
+
   Stmt iteratorVarInits = codeToInitializeIteratorVars(lattice.iterators(), lattice.points()[0].rangers(), mergers, coordinate, coordinateVar);
 
   // if modeiteratornonmerger then will be declared in codeToInitializeIteratorVars
@@ -1370,6 +1498,11 @@ Stmt LowererImpl::lowerMergeLattice(MergeLattice lattice, IndexVar coordinateVar
                        appendPositions);
 }
 
+Stmt wrap(Stmt x, std::string comment ="", std::string func= ""){
+  return Block::make(Comment::make("["+func+"]" + " " + comment), x);
+}
+#define WRAP(x) wrap(x, #x, __func__)
+
 Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
                                   ir::Expr coordinate, IndexVar coordinateVar, IndexStmt statement,
                                   const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared)
@@ -1384,6 +1517,12 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
   taco_iassert(iterators.size() > 0);
   taco_iassert(mergers.size() > 0);
   taco_iassert(rangers.size() > 0);
+
+  vector<Iterator> repeatIters = filter(mergers, [](Iterator it){return it.hasRepeatIter();});
+  if(repeatIters.size() == mergers.size() && locators.size() == 0){
+    // When we are merging only repeat iterators we can optimize computation
+    return lowerMergeRepeats(pointLattice, coordinate, coordinateVar, statement, reducedAccesses, resolvedCoordDeclared);
+  }
 
   // Load coordinates from position iterators
   Stmt loadPosIterCoordinates = codeToLoadCoordinatesFromPosIterators(iterators, !resolvedCoordDeclared);
@@ -1411,14 +1550,269 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
 
   /// While loop over rangers
   return While::make(checkThatNoneAreExhausted(rangers),
-                     Block::make(loadPosIterCoordinates,
-                                 loadCoordIterPositions,
-                                 resolvedCoordinate,
-                                 loadLocatorPosVars,
-                                 deduplicationLoops,
-                                 caseStmts,
-                                 incIteratorVarStmts));
+                     Block::make(
+                                 WRAP(loadPosIterCoordinates),
+                                 WRAP(loadCoordIterPositions),
+                                 WRAP(resolvedCoordinate),
+                                 WRAP(loadLocatorPosVars),
+                                 WRAP(deduplicationLoops),
+                                 WRAP(caseStmts),
+                                 WRAP(incIteratorVarStmts)));
 }
+
+std::pair<Stmt,Stmt> LowererImpl::lowerMergeRepeatsSingle(vector<Iterator> repeatIters, ir::Expr coordinate){
+  vector<Stmt> stmtsBefore;
+  vector<Stmt> stmtsAfter;
+  for(auto& iterator : repeatIters) {
+    ModeFunction repeatAccess = iterator.repeatAccess(iterator.getPosVar(), coordinates(iterator));
+
+    Expr pos        = iterator.getPosVar();
+    Stmt accessCompute = repeatAccess.compute();
+    Expr positionStart = repeatAccess[0];
+    Expr length        = repeatAccess[1];
+    Expr count         = repeatAccess[2];
+
+    Expr repIterVar = getRepeatIterVar(iterator.getMode());
+    Expr posOff     = getPosOffVar(iterator.getMode());
+    Expr posSave    = getPosSaveVar(iterator.getMode());
+
+    //Generate stmts for before body computation
+    Stmt posOffUpdate = Assign::make(posOff, Rem::make(ir::Add::make(posOff, 1), length));
+    Stmt savePos = Assign::make(posSave, iterator.getPosVar());
+    Stmt calcPos = Assign::make(iterator.getPosVar(), ir::Add::make(posSave, posOff));
+    stmtsBefore.push_back(accessCompute);
+    stmtsBefore.push_back(posOffUpdate);
+    stmtsBefore.push_back(savePos);
+    stmtsBefore.push_back(calcPos);
+
+    // Generate stmts for after body computation
+    stmtsAfter.push_back(Assign::make(repIterVar, ir::Add::make(repIterVar, 1)));
+    stmtsAfter.push_back(Assign::make(iterator.getCoordVar(), ir::Add::make(iterator.getCoordVar(), 1)));
+    stmtsAfter.push_back(IfThenElse::make(Eq::make(repIterVar, count),
+                                     Block::make(Assign::make(repIterVar, 0),
+                                                 Assign::make(pos, ir::Add::make(posSave,1))
+                                     ),
+                                     Assign::make(pos, posSave)));
+    stmtsAfter.push_back(Print::make(iterator.getMode().getName() +  " -- pos: %d, repIterVar: %d\\n", {pos, repIterVar}));
+  }
+
+  return {Block::make(stmtsBefore), Block::make(stmtsAfter)};
+}
+
+Stmt LowererImpl::lowerMergeRepeats(MergeLattice pointLattice,
+                                  ir::Expr coordinate, IndexVar coordinateVar, IndexStmt statement,
+                                  const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared) {
+
+  MergePoint point = pointLattice.points().front();
+  vector<Iterator> repeatIters = point.mergers();
+
+//  /* TODO: LowererImpl::lowerMergeRepeats */
+//  r02_pos_off = (r02_pos_off + 1) % COUNT;
+//  jr0 = r02_pos_save + r02_pos_off;
+//  int32_t jt0 = i * t02_dimension + j;
+//  t0_vals[jt0] = r0_vals[jr0];
+//  j++;
+//  r02_rep_iter++;
+//  if(r02_rep_iter == r02_rle[jr0]){
+//    jr0++;
+//    r02_rep_iter = 0;
+//  }
+//
+
+  vector<Expr> lenOps;
+  vector<Expr> countOps;
+  for(auto& iterator : repeatIters){
+    ModeFunction repeatAccess = iterator.repeatAccess(iterator.getPosVar(), coordinates(iterator));
+    Expr length        = repeatAccess[1];
+    Expr count         = repeatAccess[2];
+    Expr repIterVar    = getRepeatIterVar(iterator.getMode());
+
+    lenOps.push_back(length);
+    countOps.push_back(ir::Sub::make(count, repIterVar));
+  }
+
+  vector<Stmt> stmts;
+
+  // Calculate the new distance and lcm
+  Expr locDistanceVar = Var::make("locDist", Int());
+  stmts.push_back(VarDecl::make(locDistanceVar, Lcm::make(lenOps)));
+  Expr locCountVar = Var::make("locCount", Int());
+  stmts.push_back(VarDecl::make(locCountVar, Min::make(countOps)));
+
+  stmts.push_back(Print::make("locDist: %d, locCount: %d\\n", {locDistanceVar, locCountVar}));
+
+  // Generate code for count < distance case (where there is no optimization opportunity)
+  vector<Iterator> appenders;
+  vector<Iterator> inserters;
+  tie(appenders, inserters) = splitAppenderAndInserters(pointLattice.results());
+  Stmt singlePopBody = lowerForallBody(coordinate, statement, {},
+                              inserters, appenders, reducedAccesses);
+
+  Stmt before, after;
+  tie(before, after) = lowerMergeRepeatsSingle(repeatIters, coordinate);
+
+  Stmt forBody = Block::make(
+                              before,
+                              VarDecl::make(coordinate, repeatIters[0].getCoordVar()), // HACK as RLE is full
+                              singlePopBody,
+                              after);
+
+  // Generate code for count < distance case (where there is no optimization opportunity)
+  Expr forVar = Var::make("pop_iter", Int());
+  stmts.push_back(For::make(forVar, 0, Min::make(locCountVar, locDistanceVar), 1,
+            Block::make(forBody)));
+
+
+  Expr copyIterVar = Var::make("copy_iter", Int());
+
+  // Hack to get LHS of body expression
+  vector<Stmt> bodyStmts;
+  bodyStmts.push_back(VarDecl::make(coordinate, repeatIters[0].getCoordVar())); // HACK as RLE is fulls
+  if(isa<Block>(singlePopBody)){
+    const Block* body = ir::to<Block>(singlePopBody);
+    for(unsigned long i=0; i < body->contents.size()-1; i++) {
+      bodyStmts.push_back(body->contents[i]);
+    }
+    Stmt last = body->contents[body->contents.size()-1];
+    if(isa<Store>(last)){
+      const Store* s = ir::to<Store>(last);
+      bodyStmts.push_back(Store::make(s->arr, ir::Add::make(s->loc, copyIterVar),
+                  Load::make(s->arr, ir::Add::make(ir::Sub::make(s->loc, locDistanceVar), copyIterVar))));
+    } else {
+      taco_iassert("Hack did not work :( ");
+    }
+  } else{
+    taco_iassert("Hack did not work :( ");
+  }
+
+
+  vector<Stmt> stmtsFixup;
+  for(auto& iterator: repeatIters){
+    ModeFunction repeatAccess = iterator.repeatAccess(iterator.getPosVar(), coordinates(iterator));
+    Expr pos        = iterator.getPosVar();
+    Expr coord      = iterator.getCoordVar();
+    Expr count      = repeatAccess[2];
+    Expr repIterVar = getRepeatIterVar(iterator.getMode());
+
+    stmtsFixup.push_back(Assign::make(repIterVar, ir::Add::make(repIterVar, locCountVar)));
+    stmtsFixup.push_back(Assign::make(coord, ir::Add::make(coord, locCountVar)));
+    stmtsFixup.push_back(IfThenElse::make(Eq::make(repIterVar, count),
+                                    Block::make(Assign::make(repIterVar, 0),
+                                         Assign::make(pos, ir::Add::make(pos,1))
+                                          )));
+  }
+
+  Stmt repBody = Block::make(
+          Assign::make(locCountVar, ir::Sub::make(locCountVar, locDistanceVar)),
+                For::make(copyIterVar, 0, locCountVar, 1,
+                          Block::make(bodyStmts)
+                          ),
+                Block::make(stmtsFixup)
+          );
+
+  stmts.push_back(IfThenElse::make(Gt::make(locCountVar, locDistanceVar),
+                                   repBody));
+
+
+  vector<Expr> result;
+  for (const auto& iterator : repeatIters) {
+    Expr iterUnexhausted = Lt::make(iterator.getIteratorVar(),
+                                    iterator.getEndVar());
+    result.push_back(iterUnexhausted);
+  }
+  Expr cond = (!result.empty())
+  ? taco::ir::conjunction(result)
+  : Lt::make(repeatIters[0].getIteratorVar(), repeatIters[0].getEndVar());
+
+//  Print::make("")
+  return While::make(cond, //checkThatNoneAreExhausted(repeatIters),
+                            Block::make(stmts));
+}
+
+//Stmt LowererImpl::lowerMergeRepeats_(MergeLattice pointLattice,
+//                                    ir::Expr coordinate, IndexVar coordinateVar, IndexStmt statement,
+//                                    const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared) {
+//
+//  MergePoint point = pointLattice.points().front();
+//  vector<Iterator> repeatIters = point.mergers();
+//
+////  /* TODO: LowererImpl::lowerMergeRepeats */
+////  r02_pos_off = (r02_pos_off + 1) % COUNT;
+////  jr0 = r02_pos_save + r02_pos_off;
+////  int32_t jt0 = i * t02_dimension + j;
+////  t0_vals[jt0] = r0_vals[jr0];
+////  j++;
+////  r02_rep_iter++;
+////  if(r02_rep_iter == r02_rle[jr0]){
+////    jr0++;
+////    r02_rep_iter = 0;
+////  }
+////
+//
+//  vector<Stmt> stmts;
+//  for(auto& iterator : repeatIters){
+////    std::cout << "COORDVAR : " << iterator.getCoordVar() << std::endl;
+////    std::cout << "POSVAR   : " << iterator.getPosVar()   << std::endl;
+//
+//    ModeFunction repeatAccess = iterator.repeatAccess(iterator.getPosVar(), coordinates(iterator));
+//    Stmt accessCompute = repeatAccess.compute();
+//    Expr positionStart = repeatAccess[0];
+//    Expr length        = repeatAccess[1];
+//    Expr count         = repeatAccess[2];
+//    taco_iassert(repeatAccess[3].as<ir::Literal>() && repeatAccess[3].as<ir::Literal>()->getBoolValue());
+//
+//    Expr posOff = getPosOffVar(iterator.getMode());
+//    Expr posSave = getPosSaveVar(iterator.getMode());
+//
+//
+//    // Setup pos
+//    Stmt posOffUpdate = Assign::make(posOff, Rem::make(ir::Add::make(posOff, 1), length));
+//    Stmt savePos = Assign::make(posSave, iterator.getPosVar());
+//    Stmt calcPos = Assign::make(iterator.getPosVar(), ir::Add::make(posSave, posOff));
+//    stmts.push_back(accessCompute);
+//    stmts.push_back(posOffUpdate);
+//    stmts.push_back(savePos);
+//    stmts.push_back(calcPos);
+//  }
+//
+////  stmts.push_back(resolveCoordinate(repeatIters, coordinate, !resolvedCoordDeclared));
+//
+////  // One case for each child lattice point lp
+////  Stmt caseStmts = lowerMergeCases(coordinate, coordinateVar, statement, pointLattice,
+////                                   reducedAccesses);
+////  stmts.push_back(caseStmts);
+//
+//  vector<Iterator> appenders;
+//  vector<Iterator> inserters;
+//  tie(appenders, inserters) = splitAppenderAndInserters(pointLattice.results());
+//  Stmt body = lowerForallBody(coordinate, statement, {},
+//                              inserters, appenders, reducedAccesses);
+//  stmts.push_back(body);
+//
+//
+//  // Update state
+//  for(auto& iterator : repeatIters) {
+//    ModeFunction repeatAccess = iterator.repeatAccess(iterator.getPosVar(), coordinates(iterator));
+//
+//    Expr repIterVar = getRepeatIterVar(iterator.getMode());
+//    Expr coord      = iterator.getCoordVar();
+//    Expr pos        = iterator.getPosVar();
+//    Expr posSave    = getPosSaveVar(iterator.getMode());
+//    Expr count      = repeatAccess[2];
+//    stmts.push_back(Assign::make(repIterVar, ir::Add::make(repIterVar, 1)));
+//    stmts.push_back(Assign::make(iterator.getCoordVar(), ir::Add::make(iterator.getCoordVar(), 1)));
+//    stmts.push_back(IfThenElse::make(Eq::make(repIterVar, count),
+//                                     Block::make(Assign::make(repIterVar, 0),
+//                                                 Assign::make(pos, ir::Add::make(posSave,1))
+//                                     ),
+//                                     Assign::make(pos, posSave)));
+//
+//  }
+//
+//  return While::make(checkThatNoneAreExhausted(repeatIters),
+//                     Block::make(stmts));
+//
+//}
 
 Stmt LowererImpl::resolveCoordinate(std::vector<Iterator> mergers, ir::Expr coordinate, bool emitVarDecl) {
   if (mergers.size() == 1) {
@@ -1440,9 +1834,15 @@ Stmt LowererImpl::resolveCoordinate(std::vector<Iterator> mergers, ir::Expr coor
                          resolution,
                          guard);
     }
+    else if (merger.hasRepeatIter()){
+      if (emitVarDecl) {
+        return VarDecl::make(coordinate, Min::make(coordinates(mergers)));
+      }
+      else {
+        return Assign::make(coordinate, Min::make(coordinates(mergers)));
+      }
+    }
     else if (merger.hasCoordIter()) {
-      taco_not_supported_yet;
-      return Stmt();
       ModeFunction coordAccess = merger.coordAccess(parentCoordinates(merger));
       // TODO: This does not check whether the value was found
       Stmt posResolution = emitVarDecl ? VarDecl::make(merger.getPosVar(), coordAccess[0]) :
@@ -2517,7 +2917,7 @@ Stmt LowererImpl::reduceDuplicateCoordinates(Expr coordinate,
 
 Stmt LowererImpl::codeToInitializeIteratorVar(Iterator iterator, vector<Iterator> iterators, vector<Iterator> rangers, vector<Iterator> mergers, Expr coordinate, IndexVar coordinateVar) {
   vector<Stmt> result;
-  taco_iassert(iterator.hasPosIter() || iterator.hasCoordIter() ||
+  taco_iassert(iterator.hasPosIter() || iterator.hasRepeatIter() || iterator.hasCoordIter() ||
                iterator.isDimensionIterator());
 
   Expr iterVar = iterator.getIteratorVar();
@@ -2579,12 +2979,26 @@ Stmt LowererImpl::codeToInitializeIteratorVar(Iterator iterator, vector<Iterator
       result.push_back(VarDecl::make(endVar, endBounds[1]));
     }
   }
+  else if (iterator.hasRepeatIter()){
+    Expr parentPos = iterator.getParent().getPosVar();
+    ModeFunction bounds = iterator.repeatBounds(parentPos);
+    result.push_back(Comment::make("[LowererImpl::codeToInitializeIteratorVar] repeatIter"));
+    result.push_back(bounds.compute());
+    result.push_back(VarDecl::make(iterVar, bounds[0]));
+    result.push_back(VarDecl::make(endVar, bounds[1]));
+    result.push_back(Comment::make("[LowererImpl::codeToInitializeIteratorVar] variables for iterating repeats"));
+    result.push_back(VarDecl::make(getPosOffVar(iterator.getMode()), 0));
+    result.push_back(VarDecl::make(getPosSaveVar(iterator.getMode()), iterVar));
+    result.push_back(VarDecl::make(getRepeatIterVar(iterator.getMode()), 0));
+    result.push_back(VarDecl::make(iterator.getCoordVar(), 0));
+    result.push_back(Comment::make("[LowererImpl::codeToInitializeIteratorVar] repeatIter end"));
+  }
   else if (iterator.hasCoordIter()) {
-    // E.g. a hasmap mode
     // E.g. a hashmap mode
     vector<Expr> coords = coordinates(iterator);
     coords.erase(coords.begin());
     ModeFunction bounds = iterator.coordBounds(coords);
+    result.push_back(VarDecl::make(coords.back(), 0)); //TODO: This is a hack to get things to work
     result.push_back(bounds.compute());
     result.push_back(VarDecl::make(iterVar, bounds[0]));
     result.push_back(VarDecl::make(endVar, bounds[1]));
@@ -2627,10 +3041,12 @@ Stmt LowererImpl::codeToInitializeIteratorVar(Iterator iterator, vector<Iterator
 Stmt LowererImpl::codeToInitializeIteratorVars(vector<Iterator> iterators, vector<Iterator> rangers, vector<Iterator> mergers, Expr coordinate, IndexVar coordinateVar) {
   vector<Stmt> results;
   // initialize mergers first (can't depend on initializing rangers)
+  results.push_back(Comment::make("mergers"));
   for (Iterator iterator : mergers) {
     results.push_back(codeToInitializeIteratorVar(iterator, iterators, rangers, mergers, coordinate, coordinateVar));
   }
 
+  results.push_back(Comment::make("rangers"));
   for (Iterator iterator : rangers) {
       if (find(mergers.begin(), mergers.end(), iterator) == mergers.end()) {
         results.push_back(codeToInitializeIteratorVar(iterator, iterators, rangers, mergers, coordinate, coordinateVar));

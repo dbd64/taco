@@ -113,12 +113,12 @@ private:
     }
 
     Iterator iterator = getIterator(access, i);
-    taco_iassert(iterator.hasCoordIter() || iterator.hasPosIter() ||
+    taco_iassert(iterator.hasCoordIter() || iterator.hasPosIter() || iterator.hasRepeatIter() ||
                  iterator.hasLocate())
             << "Iterator must support at least one capability";
 
     vector<Iterator> pointIterators = {iterator};
-    if (provGraph.hasCoordBounds(i)) { // if there are coordiante bounds then add a ranger
+    if (provGraph.hasCoordBounds(i)) { // if there are coordinate bounds then add a ranger
       pointIterators.push_back(iterators.modeIterator(i));
     }
 

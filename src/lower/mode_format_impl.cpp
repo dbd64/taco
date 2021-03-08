@@ -58,11 +58,11 @@ ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull,
                                bool isOrdered, bool isUnique, bool isBranchless, 
 			       bool isCompact, bool isZeroless, bool hasCoordValIter, 
                                bool hasCoordPosIter, bool hasLocate, 
-                               bool hasInsert, bool hasAppend) :
+                               bool hasInsert, bool hasAppend, bool hasRepeatIter) :
     name(name), isFull(isFull), isOrdered(isOrdered), isUnique(isUnique),
     isBranchless(isBranchless), isCompact(isCompact), isZeroless(isZeroless),
     hasCoordValIter(hasCoordValIter), hasCoordPosIter(hasCoordPosIter),
-    hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend) {
+    hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend), hasRepeatIter(hasRepeatIter) {
 }
 
 ModeFormatImpl::~ModeFormatImpl() {
@@ -100,6 +100,16 @@ ModeFunction ModeFormatImpl::locate(ir::Expr parentPos,
                                   Mode mode) const {
   return ModeFunction();
 }
+
+ModeFunction ModeFormatImpl::repeatIterBounds(ir::Expr parentPos, Mode mode) const{
+  return ModeFunction();
+}
+ModeFunction ModeFormatImpl::repeatIterAccess(ir::Expr pos,
+                                      std::vector<ir::Expr> coords,
+                                      Mode mode) const{
+  return ModeFunction();
+}
+
   
 Stmt ModeFormatImpl::getInsertCoord(Expr p,
     const std::vector<Expr>& i, Mode mode) const {

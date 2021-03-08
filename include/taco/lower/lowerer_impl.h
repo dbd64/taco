@@ -100,6 +100,17 @@ protected:
                                          std::set<Access> reducedAccesses,
                                          ir::Stmt recoveryStmt);
 
+    /// Lower a forall that iterates over the positions in the iterator,
+    /// and also iterates over the repeat block returned. This currently assumes
+    /// the level is dense and generates coordinates
+    virtual ir::Stmt lowerForallRepeat(Forall forall, Iterator iterator,
+                                           std::vector<Iterator> locaters,
+                                           std::vector<Iterator> inserters,
+                                           std::vector<Iterator> appenders,
+                                           std::set<Access> reducedAccesses,
+                                           ir::Stmt recoveryStmt);
+
+
   /// Lower a forall that iterates over the positions in the iterator, accesses
   /// the iterators coordinate, and locates tensor positions from the locate
   /// iterators.
@@ -171,6 +182,15 @@ protected:
   virtual ir::Stmt lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, IndexStmt stmt,
                                    MergeLattice lattice,
                                    const std::set<Access>& reducedAccesses);
+
+  virtual std::pair<ir::Stmt, ir::Stmt> lowerMergeRepeatsSingle(std::vector<Iterator> repeatIters, ir::Expr coordinate);
+
+//  virtual ir::Stmt lowerRepeatCopyBody(ir::Expr coordinate, Index)
+
+  virtual ir::Stmt lowerMergeRepeats(MergeLattice pointLattice,
+                                     ir::Expr coordinate, IndexVar coordinateVar, IndexStmt statement,
+                                     const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared);
+
 
   /// Lower a forall loop body.
   virtual ir::Stmt lowerForallBody(ir::Expr coordinate, IndexStmt stmt,

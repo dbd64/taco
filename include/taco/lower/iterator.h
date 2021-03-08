@@ -77,6 +77,7 @@ public:
   bool hasLocate() const;
   bool hasInsert() const;
   bool hasAppend() const;
+  bool hasRepeatIter() const;
 
   /// Get the index variable this iterator iteratores over.
   IndexVar getIndexVar() const;
@@ -132,7 +133,12 @@ public:
   ModeFunction posBounds(const ir::Expr& parentPos) const;
   ModeFunction posAccess(const ir::Expr& pos, 
                          const std::vector<ir::Expr>& coords) const;
-  
+
+  /// Returns code for repeat iter
+  ModeFunction repeatBounds(const ir::Expr &parentPos) const;
+  ModeFunction repeatAccess(const ir::Expr &pos, const std::vector<ir::Expr> &coords) const;
+
+
   /// Returns code for level function that implements locate capability.
   ModeFunction locate(const std::vector<ir::Expr>& coords) const;
 

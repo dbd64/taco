@@ -2,6 +2,7 @@
 
 #include <map>
 #include <queue>
+#include <numeric>
 
 #include "taco/ir/ir.h"
 #include "taco/ir/ir_visitor.h"
@@ -326,6 +327,51 @@ struct ExpressionSimplifier : IRRewriter {
       expr = Div::make(a, b);
     }
   }
+
+  void visit(const Rem* op){
+    Expr a = rewrite(op->a);
+    Expr b = rewrite(op->b);
+
+    // a % 1 == 0
+    if(isa<Literal>(b)){
+      auto literal = to<Literal>(b);
+      if(literal->equalsScalar(1)){
+        expr = 0;
+        return;
+      }
+    }
+  }
+
+  void visit(const Lcm* op){
+    std::vector<const Literal*> constOps;
+    std::vector<Expr> nonConstOps;
+    for (auto &a : op->operands){
+      Expr aRewrite = rewrite(a);
+      if(isa<Literal>(aRewrite)) {
+        const Literal* l = to<Literal>(aRewrite);
+        constOps.push_back(l);
+      } else {
+        nonConstOps.push_back(aRewrite);
+      }
+    }
+
+    if(constOps.size() > 0) {
+      int acc = 1 ;
+      for (auto& l : constOps){
+        auto lit = l->getValue<int>();
+        acc = std::lcm(acc, lit);
+      }
+      if(nonConstOps.size() == 0){
+        expr = acc;
+        return;
+      } else {
+        nonConstOps.push_back(acc);
+        expr = Lcm::make(nonConstOps, op->type);
+        return;
+      }
+    }
+  }
+
 };
 
 ir::Expr simplify(const ir::Expr& expr) {

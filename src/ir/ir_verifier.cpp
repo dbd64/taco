@@ -88,6 +88,16 @@ protected:
       x.accept(this);
     }
   }
+
+  void visit(const Lcm *op) {
+    auto tp = op->type;
+    for (auto &x: op->operands) {
+      if (x.type() != tp) {
+        messages << "Node: " << (Expr)op << " has operand with incorrect type\n";
+      }
+      x.accept(this);
+    }
+  }
   
   void visit(const BitAnd *op) {
     // TODO: do we want to enforce integer-ness?

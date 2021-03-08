@@ -136,6 +136,7 @@ public:
   bool hasLocate() const;
   bool hasInsert() const;
   bool hasAppend() const;
+  bool hasRepeatIter() const;
 
   /// Returns true if mode format is defined, false otherwise. An undefined mode
   /// type can be used to indicate a mode whose format is not (yet) known.

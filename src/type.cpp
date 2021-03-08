@@ -37,6 +37,11 @@ bool Datatype::isInt() const {
          getKind() == Int64 || getKind() == Int128;
 }
 
+bool Datatype::isIntegral() const {
+  return isInt() || isUInt();
+}
+
+
 bool Datatype::isFloat() const {
   return getKind() == Float32 || getKind() == Float64;
 }

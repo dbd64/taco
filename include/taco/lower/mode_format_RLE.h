@@ -31,6 +31,10 @@ namespace taco {
                                      std::vector<ir::Expr> coords,
                                      Mode mode) const override;
 
+
+        ModeFunction repeatIterBounds(ir::Expr parentPos, Mode mode) const override;
+        ModeFunction repeatIterAccess(ir::Expr pos, std::vector<ir::Expr> coords, Mode mode) const override;
+
         ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;
 
         ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord,
@@ -48,6 +52,9 @@ namespace taco {
         std::vector<ir::Expr> getArrays(ir::Expr tensor, int mode,
                                         int level) const override;
 
+        ir::Expr getSavePosVar(Mode mode) const;
+        ir::Expr getPosOffsetVar(Mode mode) const;
+
     protected:
         // We use a pos array to distinguish different rows/cols/modes,
         // and a single element `size` which is the unpacked size of
@@ -55,6 +62,8 @@ namespace taco {
         ir::Expr getSizeArray(ModePack pack) const;
         ir::Expr getPosArray(ModePack pack) const;
         ir::Expr getRleArray(ModePack pack) const;
+
+        ir::Expr getValsArray(Mode mode) const;
 
         // Used for appending
         ir::Expr getPosCapacity(Mode mode) const;
@@ -67,6 +76,7 @@ namespace taco {
         bool equals(const ModeFormatImpl& other) const override;
 
         const long long allocSize;
+
     };
 
 }

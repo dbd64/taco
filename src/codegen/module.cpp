@@ -122,7 +122,8 @@ string Module::compile() {
   else {
     cc = util::getFromEnv(target.compiler_env, target.compiler);
     cflags = util::getFromEnv("TACO_CFLAGS",
-    "-O3 -ffast-math -std=c99") + " -shared -fPIC";
+"-ffast-math -std=c99 -g") + " -shared -fPIC";
+//    "-O3 -ffast-math -std=c99 -g") + " -shared -fPIC";
 #if USE_OPENMP
     cflags += " -fopenmp";
 #endif

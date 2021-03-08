@@ -134,6 +134,24 @@ void IRRewriter::visit(const Max* op) {
   }
 }
 
+void IRRewriter::visit(const Lcm* op) {
+  vector<Expr> operands;
+  bool operandsSame = true;
+  for (const Expr& operand : op->operands) {
+    Expr rewrittenOperand = rewrite(operand);
+    operands.push_back(rewrittenOperand);
+    if (rewrittenOperand != operand) {
+      operandsSame = false;
+    }
+  }
+  if (operandsSame) {
+    expr = op;
+  }
+  else {
+    expr = Lcm::make(operands);
+  }
+}
+
 void IRRewriter::visit(const BitAnd* op) {
   expr = visitBinaryOp(op, this);
 }

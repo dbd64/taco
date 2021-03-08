@@ -79,11 +79,11 @@ Iterator::Iterator(IndexVar indexVar, Expr tensor, Mode mode, Iterator parent,
   if (useNameForPos) {
     posNamePrefix = name;
   }
-  content->posVar   = Var::make(name,            Int());
+  content->posVar   = Var::make(name + "pos",            Int());
   content->endVar   = Var::make("p" + modeName + "_end",   Int());
   content->beginVar = Var::make("p" + modeName + "_begin", Int());
 
-  content->coordVar = Var::make(name, Int());
+  content->coordVar = Var::make(name + "coord", Int());
   content->segendVar = Var::make(modeName + "_segend", Int());
   content->validVar = Var::make("v" + modeName, Bool);
 }
@@ -136,11 +136,11 @@ Expr Iterator::getCoordVar() const {
 }
 
 Expr Iterator::getIteratorVar() const {
-  return hasPosIter() ? getPosVar() : getCoordVar();
+  return hasPosIter() || hasRepeatIter() ? getPosVar() : getCoordVar();
 }
 
 Expr Iterator::getDerivedVar() const {
-  return hasPosIter() ? getCoordVar() : getPosVar();
+  return hasPosIter() || hasRepeatIter() ? getCoordVar() : getPosVar();
 }
 
 Expr Iterator::getEndVar() const {
@@ -237,6 +237,12 @@ bool Iterator::hasAppend() const {
   return getMode().defined() && getMode().getModeFormat().hasAppend();
 }
 
+bool Iterator::hasRepeatIter() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().hasRepeatIter();
+}
+
 ModeFunction Iterator::coordBounds(const std::vector<ir::Expr>& coords) const {
   taco_iassert(defined() && content->mode.defined());
   return getMode().getModeFormat().impl->coordIterBounds(coords, getMode());
@@ -263,6 +269,18 @@ ModeFunction Iterator::posAccess(const ir::Expr& pos,
   taco_iassert(defined() && content->mode.defined());
   return getMode().getModeFormat().impl->posIterAccess(pos, coords, getMode());
 }
+
+ModeFunction Iterator::repeatBounds(const ir::Expr& parentPos) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->repeatIterBounds(parentPos, getMode());
+}
+
+ModeFunction Iterator::repeatAccess(const ir::Expr& pos,
+                                 const std::vector<ir::Expr>& coords) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->repeatIterAccess(pos, coords, getMode());
+}
+
 
 ModeFunction Iterator::locate(const std::vector<ir::Expr>& coords) const {
   taco_iassert(defined() && content->mode.defined());

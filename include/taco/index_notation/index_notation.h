@@ -487,12 +487,19 @@ public:
 /// Create a summation index expression.
 Reduction sum(IndexVar i, IndexExpr expr);
 
+/// Print the index statement.
+std::ostream& operator<<(std::ostream&, const IndexStmt&);
+
 /// A an index statement computes a tensor.  The index statements are
 /// assignment, forall, where, multi, and sequence.
 class IndexStmt : public util::IntrusivePtr<const IndexStmtNode> {
 public:
   IndexStmt();
   IndexStmt(const IndexStmtNode* n);
+
+  void print(){
+    operator<<(std::cout, *this) << std::endl;
+  }
 
   /// Visit the tensor expression
   void accept(IndexStmtVisitorStrict *) const;
@@ -661,9 +668,6 @@ bool isomorphic(IndexStmt, IndexStmt);
 
 /// Compare two index statments by value.
 bool equals(IndexStmt, IndexStmt);
-
-/// Print the index statement.
-std::ostream& operator<<(std::ostream&, const IndexStmt&);
 
 /// Return true if the index statement is of the given subtype.  The subtypes
 /// are Assignment, Forall, Where, Multi, and Sequence.

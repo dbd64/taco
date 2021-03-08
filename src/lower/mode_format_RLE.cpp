@@ -23,14 +23,13 @@ using namespace taco::ir;
 namespace taco {
 
     RLEModeFormat::RLEModeFormat() :
-        RLEModeFormat(false, true) {
+        RLEModeFormat(true, true) {
     }
 
     RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, bool includeComments, long long allocSize) :
             ModeFormatImpl("rle", isFull, true, isUnique, false, true, false,
-                           true, false, false, false, true),
-            allocSize(allocSize),
-            includeComments(includeComments) {
+                           true, false, false, false, true, true),
+            includeComments(includeComments), allocSize(allocSize) {
     }
 
     ModeFormat RLEModeFormat::copy(
@@ -80,6 +79,10 @@ namespace taco {
 
     Expr RLEModeFormat::getRleArray(ModePack pack) const {
         return pack.getArray(2);
+    }
+
+    Expr RLEModeFormat::getValsArray(Mode mode) const {
+        return GetProperty::make(mode.getTensorExpr(), TensorProperty::Values);
     }
 
     Expr RLEModeFormat::getPosCapacity(Mode mode) const {
@@ -172,6 +175,47 @@ namespace taco {
         return mode.getVar(indexVar);
     }
 
+    ir::Expr RLEModeFormat::getSavePosVar(Mode mode) const {
+      const std::string indexVar = mode.getName() + "_save_pos";
+
+      if (!mode.hasVar(indexVar)) {
+        Expr var = Var::make(indexVar, Int());
+        mode.addVar(indexVar, var);
+        return var;
+      }
+
+      return mode.getVar(indexVar);
+    }
+
+    ir::Expr RLEModeFormat::getPosOffsetVar(Mode mode) const {
+      const std::string indexVar = mode.getName() + "_pos_off";
+
+      if (!mode.hasVar(indexVar)) {
+        Expr var = Var::make(indexVar, Int());
+        mode.addVar(indexVar, var);
+        return var;
+      }
+
+      return mode.getVar(indexVar);
+    }
+
+
+    ModeFunction RLEModeFormat::repeatIterBounds(ir::Expr parentPos, Mode mode) const{
+      Expr pbegin = Load::make(getPosArray(mode.getModePack()), parentPos);
+      Expr pend = Load::make(getPosArray(mode.getModePack()),
+                             Add::make(parentPos, 1));
+      return ModeFunction(Stmt(), {pbegin, pend});
+    }
+
+    ModeFunction RLEModeFormat::repeatIterAccess(ir::Expr pos,
+                                                  std::vector<ir::Expr> coords,
+                                                  Mode mode) const{
+      Expr rleArray = getRleArray(mode.getModePack());
+      Expr stride = (int)mode.getModePack().getNumModes();
+      Expr count = Load::make(rleArray, Mul::make(pos, stride));
+      return ModeFunction(Stmt(), {pos, 1, count, true});
+    }
+
     ModeFunction RLEModeFormat::coordBounds(ir::Expr parentPos, Mode mode) const {
       Stmt comment = includeComments ? Comment::make("Call to RLEModeFormat::coordBounds!") : Stmt();
       return ModeFunction(comment, {0, getWidth(mode)});
@@ -183,16 +227,35 @@ namespace taco {
       Stmt c0 = includeComments ? Comment::make("--Call to RLEModeFormat::getAppendCoord!   --") : Stmt();
       Stmt c1 = includeComments ? Comment::make("--End call to RLEModeFormat::getAppendCoord--") : Stmt();
 
+      // if (coord>0 && vals[pos*stride] == vals[(pos-1)*stride]) { rle[(pos-1)*stride]++; pos--; } else { rle[pos] = 1; }
+      // TODO: if used for an outer dimension, this check is wrong + insufficient (it only checks one value back instead of all of them)
+
+      Expr valsArray = getValsArray(mode);
       Expr rleArray = getRleArray(mode.getModePack());
       Expr stride = (int)mode.getModePack().getNumModes();
+
+      Expr posMul = Mul::make(pos, stride);
+      Expr prevPosMul = Mul::make(Sub::make(pos,1), stride);
+      Expr coordGtZero = Gt::make(coord, 0);
+      Expr valsEq = Eq::make(Load::make(valsArray, posMul), Load::make(valsArray,prevPosMul));
+      Expr ifCond = And::make(coordGtZero, valsEq);
+
+      Stmt thenBlock = Block::make(
+              Store::make(rleArray, prevPosMul, Add::make(1,Load::make(rleArray, prevPosMul))),
+              Assign::make(pos, Sub::make(pos, 1))
+              );
+
       Stmt storeIdx = Store::make(rleArray, Mul::make(pos, stride), 1); // Right now every new value has a run length of 1
 
       if (mode.getModePack().getNumModes() > 1) {
-        return storeIdx;
+        return IfThenElse::make(ifCond, thenBlock, storeIdx);
+//        return Block::make({c0, IfThenElse::make(ifCond,thenBlock,storeIdx), c1})
       }
 
       Stmt maybeResizeIdx = doubleSizeIfFull(rleArray, getRleCapacity(mode), pos);
-      return Block::make({c0,maybeResizeIdx, storeIdx, c1});
+      Stmt otherwiseBlock = Block::make(maybeResizeIdx, storeIdx);
+
+      return Block::make({c0, IfThenElse::make(ifCond,thenBlock,otherwiseBlock), c1});
     }
 
     ir::Stmt RLEModeFormat::getAppendEdges(ir::Expr parentPos, ir::Expr posBegin, ir::Expr posEnd, Mode mode) const {

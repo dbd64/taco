@@ -48,6 +48,7 @@ public:
   /// @{
   bool isUInt() const;
   bool isInt() const;
+  bool isIntegral() const;
   bool isFloat() const;
   bool isComplex() const;
   bool isBool() const;

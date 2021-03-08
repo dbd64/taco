@@ -394,6 +394,31 @@ Expr Max::make(std::vector<Expr> operands, Datatype type) {
   return max;
 }
 
+Expr Lcm::make(Expr a, Expr b) {
+  return Lcm::make(a, b, max_expr_type(a, b));
+}
+
+Expr Lcm::make(Expr a, Expr b, Datatype type) {
+  taco_iassert(!a.type().isBool() && !b.type().isBool()) <<
+                                                         "Can't do arithmetic on booleans.";
+  taco_iassert(!a.type().isIntegral() && !b.type().isIntegral()) <<
+                                                         "Can only do LCM on integers.";
+
+  return Max::make({a, b}, type);
+}
+
+Expr Lcm::make(std::vector<Expr> operands) {
+  taco_iassert(operands.size() > 0);
+  return Lcm::make(operands, operands[0].type());
+}
+
+Expr Lcm::make(std::vector<Expr> operands, Datatype type) {
+  Lcm* lcm = new Lcm;
+  lcm->operands = operands;
+  lcm->type = type;
+  return lcm;
+}
+
 Expr BitAnd::make(Expr a, Expr b) {
   BitAnd *bitAnd = new BitAnd;
   bitAnd->type = UInt();
@@ -897,7 +922,9 @@ template<> void ExprNode<Rem>::accept(IRVisitorStrict *v)
 template<> void ExprNode<Min>::accept(IRVisitorStrict *v)
     const { v->visit((const Min*)this); }
 template<> void ExprNode<Max>::accept(IRVisitorStrict *v)
-    const { v->visit((const Max*)this); }
+const { v->visit((const Max*)this); }
+template<> void ExprNode<Lcm>::accept(IRVisitorStrict *v)
+const { v->visit((const Lcm*)this); }
 template<> void ExprNode<BitAnd>::accept(IRVisitorStrict *v)
     const { v->visit((const BitAnd*)this); }
 template<> void ExprNode<BitOr>::accept(IRVisitorStrict *v)

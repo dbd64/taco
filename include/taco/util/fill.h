@@ -107,7 +107,7 @@ void fillVector(TensorBase& tensor, const FillMethod& fill, double fillValue) {
         positions.push_back(i);
       }
       srand(static_cast<unsigned>(time(NULL)));
-      std::random_shuffle(positions.begin(),positions.end());
+      std::shuffle(positions.begin(),positions.end(), re);
 
       int toFill=fillValue*vectorSize;
       for (int i=0; i<toFill; i++) {
@@ -135,14 +135,14 @@ void fillMatrix(TensorBase& tens, const FillMethod& fill, double fillValue) {
   for (int i=0; i < static_cast<int>(pos.size());i++){
     pos[i]=i;
   }
-  std::random_shuffle(pos.begin(),pos.end());
+  std::shuffle(pos.begin(),pos.end(), re);
   std::vector<std::vector<int>> positions(tens.getOrder());
   for (int j=0; j<tens.getOrder(); j++) {
     positions.push_back(std::vector<int>(tensorSize[j]));
     for (int i=0; i<tensorSize[j]; i++)
       positions[j].push_back(i);
     srand(static_cast<unsigned>(time(NULL)));
-    std::random_shuffle(positions[j].begin(),positions[j].end());
+    std::shuffle(positions[j].begin(),positions[j].end(), re);
   }
   switch (fill) {
     case FillMethod::Dense: {
@@ -167,7 +167,7 @@ void fillMatrix(TensorBase& tens, const FillMethod& fill, double fillValue) {
         for (int j=0; j<(fillValue*tensorSize[1]); j++) {
           tens.insert({positions[0][i],positions[1][j]}, unif(re));
         }
-        std::random_shuffle(positions[1].begin(),positions[1].end());
+        std::shuffle(positions[1].begin(),positions[1].end(), re);
       }
       break;
     }
@@ -247,14 +247,14 @@ void fillTensor3(TensorBase& tens, const FillMethod& fill, double fillValue) {
   for (int i=0; i < static_cast<int>(pos.size()); i++){
     pos[i]=i;
   }
-  std::random_shuffle(pos.begin(),pos.end());
+  std::shuffle(pos.begin(),pos.end(), re);
   std::vector<std::vector<int>> positions(tens.getOrder());
   for (int j=0; j<tens.getOrder(); j++) {
     positions.push_back(std::vector<int>(tensorSize[j]));
     for (int i=0; i<tensorSize[0]; i++)
       positions[j].push_back(i);
     srand(static_cast<unsigned>(time(0)));
-    std::random_shuffle(positions[j].begin(),positions[j].end());
+    std::shuffle(positions[j].begin(),positions[j].end(), re);
   }
   switch (fill) {
     case FillMethod::Dense: {
@@ -286,9 +286,9 @@ void fillTensor3(TensorBase& tens, const FillMethod& fill, double fillValue) {
           for (int k=0; k<(fillValue*tensorSize[2]); k++) {
             tens.insert({positions[0][i],positions[1][j],positions[2][k]}, unif(re));
           }
-          std::random_shuffle(positions[2].begin(),positions[2].end());
+          std::shuffle(positions[2].begin(),positions[2].end(), re);
         }
-        std::random_shuffle(positions[1].begin(),positions[1].end());
+        std::shuffle(positions[1].begin(),positions[1].end(), re);
       }
       tens.pack();
       break;

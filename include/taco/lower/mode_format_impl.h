@@ -61,7 +61,7 @@ public:
   ModeFormatImpl(std::string name, bool isFull, bool isOrdered, bool isUnique, 
 		 bool isBranchless, bool isCompact, bool isZeroless, bool hasCoordValIter, 
                  bool hasCoordPosIter, bool hasLocate, bool hasInsert, 
-                 bool hasAppend);
+                 bool hasAppend, bool hasRepeatIter);
 
   virtual ~ModeFormatImpl();
 
@@ -109,7 +109,12 @@ public:
                               Mode mode) const;
 
 
-  /// Level functions that implement insert capabilitiy.
+  virtual ModeFunction repeatIterBounds(ir::Expr parentPos, Mode mode) const;
+  virtual ModeFunction repeatIterAccess(ir::Expr pos,
+                                       std::vector<ir::Expr> coords,
+                                       Mode mode) const;
+
+    /// Level functions that implement insert capabilitiy.
   /// @{
   virtual ir::Stmt
   getInsertCoord(ir::Expr p, const std::vector<ir::Expr>& i, Mode mode) const;
@@ -169,6 +174,7 @@ public:
   const bool hasLocate;
   const bool hasInsert;
   const bool hasAppend;
+  const bool hasRepeatIter;
 
 protected:
   /// Check if other mode format is identical. Can assume that this method will 
