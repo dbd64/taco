@@ -7,6 +7,7 @@
 #include "taco/storage/storage.h"
 #include "taco/storage/array.h"
 #include "taco/util/strings.h"
+#include "taco/lower/mode_format_impl.h"
 
 using namespace std;
 using namespace taco::ir;
@@ -33,11 +34,18 @@ struct Iterator::Content {
   // the expressions representing an upper and lower bound. An iterator
   // is windowed if window is not NULL.
   struct Window {
-      ir::Expr lo;
-      ir::Expr hi;
-      Window(ir::Expr _lo, ir::Expr _hi) : lo(_lo), hi(_hi) {};
+    // windowVar is a Var specific to this iterator. It is intended to
+    // be used as temporary storage to avoid duplicate memory loads of
+    // expressions that are used in window/stride related bounds checking.
+    ir::Expr windowVar;
+    ir::Expr lo;
+    ir::Expr hi;
+    ir::Expr stride;
+    Window(ir::Expr _lo, ir::Expr _hi, ir::Expr _stride, ir::Expr _windowVar) :
+      windowVar(_windowVar), lo(_lo), hi(_hi), stride(_stride) {};
   };
   std::unique_ptr<Window> window;
+  Iterator indexSetIterator;
 };
 
 Iterator::Iterator() : content(nullptr) {
@@ -243,6 +251,24 @@ bool Iterator::hasRepeatIter() const {
   return getMode().defined() && getMode().getModeFormat().hasRepeatIter();
 }
 
+bool Iterator::hasSeqInsertEdge() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().hasSeqInsertEdge();
+}
+
+bool Iterator::hasInsertCoord() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().hasInsertCoord();
+}
+
+bool Iterator::isYieldPosPure() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().isYieldPosPure();
+}
+
 ModeFunction Iterator::coordBounds(const std::vector<ir::Expr>& coords) const {
   taco_iassert(defined() && content->mode.defined());
   return getMode().getModeFormat().impl->coordIterBounds(coords, getMode());
@@ -353,6 +379,58 @@ Stmt Iterator::getAppendFinalizeLevel(const Expr& szPrev, const Expr& sz) const{
                                                               getMode());
 }
 
+Expr Iterator::getAssembledSize(const Expr& prevSize) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getAssembledSize(prevSize, getMode());
+}
+
+Stmt Iterator::getSeqInitEdges(const Expr& prevSize, 
+    const std::vector<AttrQueryResult>& queries) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getSeqInitEdges(prevSize, queries, 
+                                                         getMode());
+}
+
+Stmt Iterator::getSeqInsertEdge(const Expr& parentPos, 
+    const std::vector<Expr>& coords, 
+    const std::vector<AttrQueryResult>& queries) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getSeqInsertEdge(parentPos, coords, 
+                                                          queries, getMode());
+}
+
+Stmt Iterator::getInitCoords(const Expr& prevSize, 
+    const std::vector<AttrQueryResult>& queries) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getInitCoords(prevSize, queries, 
+                                                       getMode());
+}
+
+Stmt Iterator::getInitYieldPos(const Expr& prevSize) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getInitYieldPos(prevSize, getMode());
+}
+
+ModeFunction Iterator::getYieldPos(const Expr& parentPos, 
+    const std::vector<Expr>& coords) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getYieldPos(parentPos, coords, 
+                                                     getMode());
+}
+
+Stmt Iterator::getInsertCoord(const Expr& parentPos, const Expr& pos, 
+    const std::vector<Expr>& coords) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getInsertCoord(parentPos, pos, coords, 
+                                                        getMode());
+}
+
+Stmt Iterator::getFinalizeYieldPos(const Expr& prevSize) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getFinalizeYieldPos(prevSize, 
+                                                             getMode());
+}
+
 bool Iterator::defined() const {
   return content != nullptr;
 }
@@ -371,8 +449,40 @@ ir::Expr Iterator::getWindowUpperBound() const {
   return this->content->window->hi;
 }
 
-void Iterator::setWindowBounds(ir::Expr lo, ir::Expr hi) {
-  this->content->window = std::make_unique<Content::Window>(Content::Window(lo, hi));
+ir::Expr Iterator::getStride() const {
+  taco_iassert(this->isWindowed());
+  return this->content->window->stride;
+}
+
+ir::Expr Iterator::getWindowVar() const {
+  taco_iassert(this->isWindowed());
+  return this->content->window->windowVar;
+}
+
+bool Iterator::isStrided() const {
+  // It's not necessary but makes things simpler to require a window in order
+  // to have a stride.
+  taco_iassert(this->isWindowed());
+  auto strideLiteral = this->content->window->stride.as<ir::Literal>();
+  return !(strideLiteral != nullptr && strideLiteral->getIntValue() == 1);
+}
+
+void Iterator::setWindowBounds(ir::Expr lo, ir::Expr hi, ir::Expr stride) {
+  auto windowVarName = this->getIndexVar().getName() + this->getMode().getName() + "_window";
+  auto wvar = ir::Var::make(windowVarName, Int());
+  this->content->window = std::make_unique<Content::Window>(Content::Window(lo, hi, stride, wvar));
+}
+
+bool Iterator::hasIndexSet() const {
+  return this->content->indexSetIterator.defined();
+}
+Iterator Iterator::getIndexSetIterator() const {
+  taco_iassert(this->hasIndexSet());
+  return this->content->indexSetIterator;
+}
+
+void Iterator::setIndexSetIterator(Iterator iter) {
+  this->content->indexSetIterator = iter;
 }
 
 bool operator==(const Iterator& a, const Iterator& b) {
@@ -419,26 +529,6 @@ Iterators::Iterators()
 }
 
 
-static std::map<TensorVar, ir::Expr> createIRTensorVars(IndexStmt stmt)
-{
-  std::map<TensorVar, ir::Expr> tensorVars;
-
-  // Create result and parameter variables
-  vector<TensorVar> results = getResults(stmt);
-  vector<TensorVar> arguments = getArguments(stmt);
-  vector<TensorVar> temporaries = getTemporaries(stmt);
-
-  // Convert tensor results, arguments and temporaries to IR variables
-  map<TensorVar, Expr> resultVars;
-  vector<Expr> resultsIR = createVars(results, &resultVars);
-  tensorVars.insert(resultVars.begin(), resultVars.end());
-  vector<Expr> argumentsIR = createVars(arguments, &tensorVars);
-  vector<Expr> temporariesIR = createVars(temporaries, &tensorVars);
-
-  return tensorVars;
-}
-
-
 Iterators::Iterators(IndexStmt stmt) : Iterators(stmt, createIRTensorVars(stmt))
 {
 }
@@ -469,7 +559,7 @@ Iterators::Iterators(IndexStmt stmt, const map<TensorVar, Expr>& tensorVars)
       taco_iassert(util::contains(tensorVars, n->tensorVar));
       Expr tensorIR = tensorVars.at(n->tensorVar);
       Format format = n->tensorVar.getFormat();
-      this->createAccessIterators(Access(n), format, tensorIR, provGraph);
+      this->createAccessIterators(Access(n), format, tensorIR, provGraph, tensorVars);
     }),
     function<void(const AssignmentNode*, Matcher*)>([&](auto n, auto m) {
       m->match(n->rhs);
@@ -484,9 +574,9 @@ Iterators::Iterators(IndexStmt stmt, const map<TensorVar, Expr>& tensorVars)
 }
 
 
-void
-Iterators::createAccessIterators(Access access, Format format, Expr tensorIR, ProvenanceGraph provGraph)
-{
+void Iterators::createAccessIterators(Access access, Format format, Expr tensorIR,
+                                      ProvenanceGraph provGraph,
+                                      const map<TensorVar, Expr> &tensorVars) {
   TensorVar tensorConcrete = access.getTensorVar();
   taco_iassert(tensorConcrete.getOrder() == format.getOrder())
       << tensorConcrete << ", Format" << format;
@@ -530,7 +620,24 @@ Iterators::createAccessIterators(Access access, Format format, Expr tensorIR, Pr
       if (access.isModeWindowed(modeNumber)) {
         auto lo = ir::Literal::make(access.getWindowLowerBound(modeNumber));
         auto hi = ir::Literal::make(access.getWindowUpperBound(modeNumber));
-        iterator.setWindowBounds(lo, hi);
+        auto stride = ir::Literal::make(access.getStride(modeNumber));
+        iterator.setWindowBounds(lo, hi, stride);
+      }
+      // If the access that corresponds to this iterator has an index set,
+      // then we need to construct an iterator for the index set.
+      if (access.isModeIndexSet(modeNumber)) {
+        auto tv = access.getModeIndexSetTensor(modeNumber);
+        auto tvVar = tensorVars.at(tv);
+        auto tvFormat = tv.getFormat();
+        auto tvShape = tv.getType().getShape();
+        auto accessIvar = access.getIndexVars()[modeNumber];
+        ModePack tvModePack(1, tvFormat.getModeFormats()[0], tvVar, 0, 1);
+        Mode tvMode(tvVar, tvShape.getDimension(0), 1, tvFormat.getModeFormats()[0], tvModePack, 0, ModeFormat());
+        // Finally, construct the iterator and register it as an indexSetIterator.
+        auto iter = Iterator(accessIvar, tvVar, tvMode, {tvVar}, accessIvar.getName() + tv.getName() + "_filter");
+        iterator.setIndexSetIterator(iter);
+        // Also add the iterator to the modeAccesses map.
+        content->modeAccesses.insert({iter, {access, modeNumber + 1}});
       }
 
       content->levelIterators.insert({{access,modeNumber+1}, iterator});

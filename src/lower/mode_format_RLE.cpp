@@ -28,7 +28,8 @@ namespace taco {
 
     RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, bool includeComments, long long allocSize) :
             ModeFormatImpl("rle", isFull, true, isUnique, false, true, false,
-                           true, false, false, false, true, true),
+                           true, false, false, false, true,
+                           false, false, false, true),
             includeComments(includeComments), allocSize(allocSize) {
     }
 
@@ -134,7 +135,7 @@ namespace taco {
         std::vector<Stmt> stmts{};
 
         // We need to decrement the current length
-        stmts.push_back(Assign::make(getCurLenVar(mode), Sub::make(getCurLenVar(mode), 1)));
+        stmts.push_back(Assign::make(getCurLenVar(mode), ir::Sub::make(getCurLenVar(mode), 1)));
 
         // We need a variable to store the index we use to access
         Expr pVar = Var::make("result_index" + mode.getName(), Int());
@@ -142,7 +143,7 @@ namespace taco {
 
         // If the current length is zero we need to update the index and length vars
         Stmt thenBlock = Block::make(
-            Assign::make(getIndexVar(mode), Add::make(getIndexVar(mode), 1)),
+            Assign::make(getIndexVar(mode), ir::Add::make(getIndexVar(mode), 1)),
             Assign::make(getCurLenVar(mode),Load::make(getRleArray(mode.getModePack()),getIndexVar(mode)))
                                     );
         Stmt ifStmt = IfThenElse::make({Eq::make(getCurLenVar(mode), 0)},thenBlock);
@@ -203,7 +204,7 @@ namespace taco {
     ModeFunction RLEModeFormat::repeatIterBounds(ir::Expr parentPos, Mode mode) const{
       Expr pbegin = Load::make(getPosArray(mode.getModePack()), parentPos);
       Expr pend = Load::make(getPosArray(mode.getModePack()),
-                             Add::make(parentPos, 1));
+                             ir::Add::make(parentPos, 1));
       return ModeFunction(Stmt(), {pbegin, pend});
     }
 
@@ -212,7 +213,7 @@ namespace taco {
                                                   Mode mode) const{
       Expr rleArray = getRleArray(mode.getModePack());
       Expr stride = (int)mode.getModePack().getNumModes();
-      Expr count = Load::make(rleArray, Mul::make(pos, stride));
+      Expr count = Load::make(rleArray, ir::Mul::make(pos, stride));
       return ModeFunction(Stmt(), {pos, 1, count, true});
     }
 
@@ -234,18 +235,18 @@ namespace taco {
       Expr rleArray = getRleArray(mode.getModePack());
       Expr stride = (int)mode.getModePack().getNumModes();
 
-      Expr posMul = Mul::make(pos, stride);
-      Expr prevPosMul = Mul::make(Sub::make(pos,1), stride);
+      Expr posMul = ir::Mul::make(pos, stride);
+      Expr prevPosMul = ir::Mul::make(ir::Sub::make(pos,1), stride);
       Expr coordGtZero = Gt::make(coord, 0);
       Expr valsEq = Eq::make(Load::make(valsArray, posMul), Load::make(valsArray,prevPosMul));
       Expr ifCond = And::make(coordGtZero, valsEq);
 
       Stmt thenBlock = Block::make(
-              Store::make(rleArray, prevPosMul, Add::make(1,Load::make(rleArray, prevPosMul))),
-              Assign::make(pos, Sub::make(pos, 1))
+              Store::make(rleArray, prevPosMul, ir::Add::make(1,Load::make(rleArray, prevPosMul))),
+              Assign::make(pos, ir::Sub::make(pos, 1))
               );
 
-      Stmt storeIdx = Store::make(rleArray, Mul::make(pos, stride), 1); // Right now every new value has a run length of 1
+      Stmt storeIdx = Store::make(rleArray, ir::Mul::make(pos, stride), 1); // Right now every new value has a run length of 1
 
       if (mode.getModePack().getNumModes() > 1) {
         return IfThenElse::make(ifCond, thenBlock, storeIdx);
@@ -266,8 +267,8 @@ namespace taco {
       Expr posArray = getPosArray(mode.getModePack());
       ModeFormat parentModeType = mode.getParentModeType();
       Expr edges = (!parentModeType.defined() || parentModeType.hasAppend())
-                   ? posEnd : Sub::make(posEnd, posBegin);
-      Stmt store = Store::make(posArray, Add::make(parentPos, 1), edges);
+                   ? posEnd : ir::Sub::make(posEnd, posBegin);
+      Stmt store = Store::make(posArray, ir::Add::make(parentPos, 1), edges);
 
       return Block::make(c0,store,c1);
     }
@@ -278,8 +279,8 @@ namespace taco {
 
     ir::Stmt RLEModeFormat::getAppendInitEdges(ir::Expr parentPosBegin, ir::Expr parentPosEnd, Mode mode) const {
 
-      if (isa<Literal>(parentPosBegin)) {
-        taco_iassert(to<Literal>(parentPosBegin)->equalsScalar(0));
+      if (isa<ir::Literal>(parentPosBegin)) {
+        taco_iassert(to<ir::Literal>(parentPosBegin)->equalsScalar(0));
         if(includeComments) {
           Stmt c0 = Comment::make("-- Call to RLEModeFormat::getAppendInitEdges (literal case)!    --");
           Stmt c1 = Comment::make("-- End call to RLEModeFormat::getAppendInitEdges (literal case) --");
@@ -303,8 +304,8 @@ namespace taco {
       Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendInitEdges --") : Stmt();
 
       Expr pVar = Var::make("p" + mode.getName(), Int());
-      Expr lb = Add::make(parentPosBegin, 1);
-      Expr ub = Add::make(parentPosEnd, 1);
+      Expr lb = ir::Add::make(parentPosBegin, 1);
+      Expr ub = ir::Add::make(parentPosEnd, 1);
       Stmt initPos = For::make(pVar, lb, ub, 1, Store::make(posArray, pVar, 0));
       Stmt maybeResizePos = atLeastDoubleSizeIfFull(posArray, posCapacity, parentPosEnd);
       return Block::make({c0, maybeResizePos, initPos, c1});
@@ -314,12 +315,12 @@ namespace taco {
       Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendInitLevel!    --") : Stmt();
       Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendInitLevel --") : Stmt();
 
-      const bool szPrevIsZero = isa<Literal>(parentSize) &&
-                                to<Literal>(parentSize)->equalsScalar(0);
+      const bool szPrevIsZero = isa<ir::Literal>(parentSize) &&
+                                to<ir::Literal>(parentSize)->equalsScalar(0);
 
-      Expr defaultCapacity = Literal::make(allocSize, Datatype::Int32);
+      Expr defaultCapacity = ir::Literal::make(allocSize, Datatype::Int32);
       Expr posArray = getPosArray(mode.getModePack());
-      Expr initCapacity = szPrevIsZero ? defaultCapacity : Add::make(parentSize, 1);
+      Expr initCapacity = szPrevIsZero ? defaultCapacity : ir::Add::make(parentSize, 1);
       Expr posCapacity = initCapacity;
 
       std::vector<Stmt> initStmts;
@@ -351,7 +352,7 @@ namespace taco {
 
     ir::Stmt RLEModeFormat::getAppendFinalizeLevel(ir::Expr parentSize, ir::Expr size, Mode mode) const {
       ModeFormat parentModeType = mode.getParentModeType();
-      if ((isa<Literal>(parentSize) && to<Literal>(parentSize)->equalsScalar(1)) ||
+      if ((isa<ir::Literal>(parentSize) && to<ir::Literal>(parentSize)->equalsScalar(1)) ||
           !parentModeType.defined() || parentModeType.hasAppend()) {
         return Stmt();
       }
@@ -361,10 +362,10 @@ namespace taco {
 
       Expr pVar = Var::make("p" + mode.getName(), Int());
       Expr loadPos = Load::make(getPosArray(mode.getModePack()), pVar);
-      Stmt incCs = Assign::make(csVar, Add::make(csVar, loadPos));
+      Stmt incCs = Assign::make(csVar, ir::Add::make(csVar, loadPos));
       Stmt updatePos = Store::make(getPosArray(mode.getModePack()), pVar, csVar);
       Stmt body = Block::make({incCs, updatePos});
-      Stmt finalizeLoop = For::make(pVar, 1, Add::make(parentSize, 1), 1, body);
+      Stmt finalizeLoop = For::make(pVar, 1, ir::Add::make(parentSize, 1), 1, body);
 
       Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendFinalizeLevel!    --") : Stmt();
       Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendFinalizeLevel --") : Stmt();

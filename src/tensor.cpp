@@ -468,7 +468,8 @@ static inline map<TensorVar, TensorBase> getTensors(const IndexExpr& expr);
 /// tensors that was used in an expression when we later want to pack arguments.
 struct AccessTensorNode : public AccessNode {
   AccessTensorNode(TensorBase tensor, const std::vector<IndexVar>& indices)
-      :  AccessNode(tensor.getTensorVar(), indices), tensor(tensor) {}
+      :  AccessNode(tensor.getTensorVar(), indices, {}, false), 
+         tensor(tensor) {}
 
   AccessTensorNode(TensorBase tensor, const std::vector<std::shared_ptr<IndexVarInterface>>& indices)
     : AccessNode(tensor.getTensorVar()), tensor(tensor) {
@@ -488,6 +489,21 @@ struct AccessTensorNode : public AccessNode {
           "slice upper bound must be <= tensor dimension (" << tensor.getDimension(i) << ")";
         this->windowedModes[i].lo = lo;
         this->windowedModes[i].hi = hi;
+        this->windowedModes[i].stride = wvar->getStride();
+      }, [&](std::shared_ptr<IndexSetVar> svar) {
+        ivars[i] = svar->getIndexVar();
+        // Extract the user provided index set.
+        auto indexSet = svar->getIndexSet();
+        // Ensure that it has at most dim(t, i) elements.
+        taco_uassert(indexSet.size() <= size_t(tensor.getDimension(i)));
+        // Pack up the index set into a sparse tensor.
+        TensorBase indexSetTensor(tensor.getComponentType(), {int(indexSet.size())}, Compressed);
+        for (auto& coord : indexSet) {
+          indexSetTensor.insert({coord}, 1);
+        }
+        indexSetTensor.pack();
+        this->indexSetModes[i].set = std::make_shared<std::vector<int>>(indexSet);
+        this->indexSetModes[i].tensor = indexSetTensor;
       });
     }
     // Initialize this->indexVars.
@@ -725,6 +741,15 @@ static inline map<TensorVar, TensorBase> getTensors(const IndexExpr& expr) {
         arguments.insert({node->tensorVar, to<AccessTensorNode>(node)->tensor});
       }
 
+      // Also add any tensors backing index sets of tensor accesses.
+      for (auto& p : node->indexSetModes) {
+        auto tv = p.second.tensor.getTensorVar();
+        if (!util::contains(arguments, tv)) {
+          arguments.insert({tv, p.second.tensor});
+        }
+      }
+
+      // TODO (rohany): This seems like dead code.
       TensorBase tensor = to<AccessTensorNode>(node)->tensor;
       if (!util::contains(inserted, tensor)) {
         inserted.insert(tensor);
@@ -743,6 +768,15 @@ vector<void*> packArguments(const TensorBase& tensor) {
 
   // Pack the result tensor
   arguments.push_back(tensor.getStorage());
+
+  // Pack any index sets on the result tensor at the front of the arguments list.
+  auto lhs = getNode(tensor.getAssignment().getLhs());
+  if (isa<AccessTensorNode>(lhs)) {
+    auto indexSetModes = to<AccessTensorNode>(lhs)->indexSetModes;
+    for (auto& it : indexSetModes) {
+      arguments.push_back(it.second.tensor.getStorage());
+    }
+  }
 
   // Pack operand tensors
   auto operands = getArguments(makeConcreteNotation(tensor.getAssignment()));

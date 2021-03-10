@@ -326,31 +326,34 @@ static bool setSchedulingCommands(vector<vector<string>> scheduleCommands, parse
       stmt = stmt.fuse(findVar(i), findVar(j), fused);
 
     } else if (command == "split") {
-      taco_uassert(scheduleCommand.size() == 4) << "'split' scheduling directive takes 4 parameters: split(i, i1, i2, splitFactor)";
+      taco_uassert(scheduleCommand.size() == 4)
+          << "'split' scheduling directive takes 4 parameters: split(i, i1, i2, splitFactor)";
       string i, i1, i2;
       size_t splitFactor;
-      i  = scheduleCommand[0];
+      i = scheduleCommand[0];
       i1 = scheduleCommand[1];
       i2 = scheduleCommand[2];
-      taco_uassert(sscanf(scheduleCommand[3].c_str(), "%zu", &splitFactor) == 1) << "failed to parse fourth parameter to `split` directive as a size_t";
+      taco_uassert(sscanf(scheduleCommand[3].c_str(), "%zu", &splitFactor) == 1)
+          << "failed to parse fourth parameter to `split` directive as a size_t";
 
       IndexVar split1(i1);
       IndexVar split2(i2);
       stmt = stmt.split(findVar(i), split1, split2, splitFactor);
+    } else if (command == "divide") {
+      taco_uassert(scheduleCommand.size() == 4)
+          << "'divide' scheduling directive takes 4 parameters: split(i, i1, i2, divFactor)";
+      string i, i1, i2;
+      i = scheduleCommand[0];
+      i1 = scheduleCommand[1];
+      i2 = scheduleCommand[2];
 
-    // } else if (command == "divide") {
-    //   string i, i1, i2;
-    //   in >> i;
-    //   in >> i1;
-    //   in >> i2;
+      size_t divideFactor;
+      taco_uassert(sscanf(scheduleCommand[3].c_str(), "%zu", &divideFactor) == 1)
+          << "failed to parse fourth parameter to `divide` directive as a size_t";
 
-    //   size_t divideFactor;
-    //   in >> divideFactor;
-
-    //   IndexVar divide1(i1);
-    //   IndexVar divide2(i2);
-    //   stmt = stmt.divide(findVar(i), divide1, divide2, divideFactor);
-
+      IndexVar divide1(i1);
+      IndexVar divide2(i2);
+      stmt = stmt.divide(findVar(i), divide1, divide2, divideFactor);
     } else if (command == "precompute") {
       string exprStr, i, iw;
       taco_uassert(scheduleCommand.size() == 3) << "'precompute' scheduling directive takes 3 parameters: precompute(expr, i, iw)";
@@ -431,6 +434,7 @@ static bool setSchedulingCommands(vector<vector<string>> scheduleCommands, parse
 
       TensorVar workspace("workspace", Type(Float64, {dim}), Dense);
       stmt = stmt.precompute(visitor.expr, orig, pre, workspace);
+      std::cout << "stmt: " << stmt << std::endl;
 
     } else if (command == "reorder") {
       taco_uassert(scheduleCommand.size() > 1) << "'reorder' scheduling directive needs at least 2 parameters: reorder(outermost, ..., innermost)";
@@ -522,6 +526,36 @@ static bool setSchedulingCommands(vector<vector<string>> scheduleCommands, parse
       }
 
       stmt = stmt.parallelize(findVar(i), parallel_unit, output_race_strategy);
+
+    } else if (command == "assemble") {
+      taco_uassert(scheduleCommand.size() == 2) 
+          << "'assemble' scheduling directive takes 2 parameters: "
+          << "assemble(tensor, strategy)";
+
+      string tensor = scheduleCommand[0];
+      string strategy = scheduleCommand[1];
+
+      TensorVar result;
+      for (auto a : getResultAccesses(stmt).first) {
+        if (a.getTensorVar().getName() == tensor) {
+          result = a.getTensorVar();
+          break;
+        }
+      }
+      taco_uassert(result.defined()) << "Unable to find result tensor '"
+                                     << tensor << "'";
+
+      AssembleStrategy assemble_strategy;
+      if (strategy == "append") {
+        assemble_strategy = AssembleStrategy::Append;
+      } else if (strategy == "insert") {
+        assemble_strategy = AssembleStrategy::Insert;
+      } else {
+        taco_uerror << "Assemble strategy not defined.";
+        goto end;
+      }
+
+      stmt = stmt.assemble(result, assemble_strategy);
 
     } else {
       taco_uerror << "Unknown scheduling function \"" << command << "\"";
@@ -633,6 +667,9 @@ int main(int argc, char* argv[]) {
             break;
           case 'u':
             modeTypes.push_back(ModeFormat::Sparse(ModeFormat::NOT_UNIQUE));
+            break;
+          case 'z':
+            modeTypes.push_back(ModeFormat::Sparse(ModeFormat::ZEROLESS));
             break;
           case 'c':
             modeTypes.push_back(ModeFormat::Singleton(ModeFormat::NOT_UNIQUE));
@@ -1026,12 +1063,13 @@ int main(int argc, char* argv[]) {
   IndexStmt stmt =
       makeConcreteNotation(makeReductionNotation(tensor.getAssignment()));
   stmt = reorderLoopsTopologically(stmt);
+  stmt = insertTemporaries(stmt); // TODO: move back down
 
   if (setSchedule) {
     cuda |= setSchedulingCommands(scheduleCommands, parser, stmt);
   }
   else {
-    stmt = insertTemporaries(stmt);
+    //stmt = insertTemporaries(stmt);
     stmt = parallelizeOuterLoop(stmt);
   }
 
@@ -1151,11 +1189,14 @@ int main(int argc, char* argv[]) {
     " */";
 
   vector<ir::Stmt> packs;
-  for (auto a : getArgumentAccesses(stmt)) {
+  std::set<TensorVar> generatedPack;
+  for (auto a : getArgumentAccesses(tensor.getAssignment())) {
     TensorVar tensor = a.getTensorVar();
-    if (tensor.getOrder() == 0) {
+    if (tensor.getOrder() == 0 || util::contains(generatedPack, tensor)) {
       continue;
     }
+
+    generatedPack.insert(tensor);
 
     std::string tensorName = tensor.getName();
     std::vector<IndexVar> indexVars = a.getIndexVars();
@@ -1165,7 +1206,7 @@ int main(int argc, char* argv[]) {
   }
 
   ir::Stmt unpack;
-  for (auto a : getResultAccesses(stmt).first) {
+  for (auto a : getResultAccesses(tensor.getAssignment()).first) {
     TensorVar tensor = a.getTensorVar();
     if (tensor.getOrder() == 0) {
       continue;

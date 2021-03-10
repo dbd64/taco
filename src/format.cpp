@@ -283,6 +283,27 @@ bool ModeFormat::hasRepeatIter() const {
   return impl->hasRepeatIter;
 }
 
+bool ModeFormat::hasSeqInsertEdge() const {
+  taco_iassert(defined());
+  return impl->hasSeqInsertEdge;
+}
+
+bool ModeFormat::hasInsertCoord() const {
+  taco_iassert(defined());
+  return impl->hasInsertCoord;
+}
+
+bool ModeFormat::isYieldPosPure() const {
+  taco_iassert(defined());
+  return impl->isYieldPosPure;
+}
+
+std::vector<AttrQuery> ModeFormat::getAttrQueries(
+    std::vector<IndexVar> parentCoords, 
+    std::vector<IndexVar> childCoords) const {
+  taco_iassert(defined());
+  return impl->attrQueries(parentCoords, childCoords);
+}
 
 bool ModeFormat::defined() const {
   return impl != nullptr;

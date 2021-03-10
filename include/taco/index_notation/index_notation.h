@@ -20,7 +20,6 @@
 #include "taco/index_notation/intrinsic.h"
 #include "taco/index_notation/index_notation_nodes_abstract.h"
 #include "taco/ir_tags.h"
-#include "taco/lower/iterator.h"
 #include "taco/index_notation/provenance_graph.h"
 
 namespace taco {
@@ -32,6 +31,7 @@ class Schedule;
 
 class IndexVar;
 class WindowedIndexVar;
+class IndexSetVar;
 class TensorVar;
 
 class IndexExpr;
@@ -39,7 +39,7 @@ class Assignment;
 class Access;
 
 struct AccessNode;
-struct AccessWindow;
+struct IndexVarIterationModifier;
 struct LiteralNode;
 struct NegNode;
 struct SqrtNode;
@@ -56,6 +56,7 @@ struct YieldNode;
 struct ForallNode;
 struct WhereNode;
 struct SequenceNode;
+struct AssembleNode;
 struct MultiNode;
 struct SuchThatNode;
 
@@ -223,14 +224,21 @@ public:
   Access() = default;
   Access(const Access&) = default;
   Access(const AccessNode*);
-  Access(const TensorVar &tensorVar, const std::vector<IndexVar> &indices = {},
-         const std::map<int, AccessWindow> &windows = {});
+  Access(const TensorVar& tensorVar, const std::vector<IndexVar>& indices={}, 
+         const std::map<int, std::shared_ptr<IndexVarIterationModifier>>& modifiers={},
+         bool isAccessingStructure=false);
 
   /// Return the Access expression's TensorVar.
   const TensorVar &getTensorVar() const;
 
   /// Returns the index variables used to index into the Access's TensorVar.
   const std::vector<IndexVar>& getIndexVars() const;
+
+  /// Returns whether access expression returns sparsity pattern of tensor.
+  /// If true, the access expression returns 1 for every physically stored 
+  /// component. If false, the access expression returns the value that is  
+  /// stored for each corresponding component.
+  bool isAccessingStructure() const;
 
   /// hasWindowedModes returns true if any accessed modes are windowed.
   bool hasWindowedModes() const;
@@ -241,6 +249,25 @@ public:
   /// Return the {lower,upper} bound of the window on the input mode (0-indexed).
   int getWindowLowerBound(int mode) const;
   int getWindowUpperBound(int mode) const;
+
+  /// getWindowSize returns the dimension size of a window.
+  int getWindowSize(int mode) const;
+
+  /// getStride returns the stride of a window.
+  int getStride(int mode) const;
+
+  /// hasIndexSetModes returns true if any accessed modes have an index set.
+  bool hasIndexSetModes() const;
+
+  /// Returns whether or not the input mode (0-indexed) has an index set.
+  bool isModeIndexSet(int mode) const;
+
+  /// getModeIndexSetTensor returns a TensorVar corresponding to the Tensor that
+  /// backs the index set for the input mode.
+  TensorVar getModeIndexSetTensor(int mode) const;
+
+  /// getIndexSet returns the index set of the input mode.
+  const std::vector<int>& getIndexSet(int mode) const;
 
   /// Assign the result of an expression to a left-hand-side tensor access.
   /// ```
@@ -661,6 +688,8 @@ public:
   /// integer number of iterations
   /// Preconditions: unrollFactor is a positive nonzero integer
   IndexStmt unroll(IndexVar i, size_t unrollFactor) const;
+
+  IndexStmt assemble(TensorVar result, AssembleStrategy strategy) const;
 };
 
 /// Check if two index statements are isomorphic.
@@ -801,6 +830,27 @@ public:
 Sequence sequence(IndexStmt definition, IndexStmt mutation);
 
 
+class Assemble : public IndexStmt {
+public:
+  typedef std::map<TensorVar,std::vector<std::vector<TensorVar>>> AttrQueryResults;
+
+  Assemble() = default;
+  Assemble(const AssembleNode*);
+  Assemble(IndexStmt queries, IndexStmt compute, AttrQueryResults results);
+
+  IndexStmt getQueries() const;
+  IndexStmt getCompute() const;
+
+  const AttrQueryResults& getAttrQueryResults() const;
+
+  typedef AssembleNode Node;
+};
+
+/// Create an assemble index statement.
+Assemble assemble(IndexStmt queries, IndexStmt compute, 
+                  Assemble::AttrQueryResults results);
+
+
 /// A multi statement has two statements that are executed separately, and let
 /// us compute more than one tensor in a concrete index notation statement.
 class Multi : public IndexStmt {
@@ -826,6 +876,7 @@ Multi multi(IndexStmt stmt1, IndexStmt stmt2);
 /// completeness, the current implementers of IndexVarInterface are:
 /// * IndexVar
 /// * WindowedIndexVar
+/// * IndexSetVar
 /// If this set changes, make sure to update the match function.
 class IndexVarInterface {
 public:
@@ -837,16 +888,20 @@ public:
   static void match(
       std::shared_ptr<IndexVarInterface> ptr,
       std::function<void(std::shared_ptr<IndexVar>)> ivarFunc,
-      std::function<void(std::shared_ptr<WindowedIndexVar>)> wvarFunc
+      std::function<void(std::shared_ptr<WindowedIndexVar>)> wvarFunc,
+      std::function<void(std::shared_ptr<IndexSetVar>)> isetVarFunc
   ) {
     auto iptr = std::dynamic_pointer_cast<IndexVar>(ptr);
     auto wptr = std::dynamic_pointer_cast<WindowedIndexVar>(ptr);
+    auto sptr = std::dynamic_pointer_cast<IndexSetVar>(ptr);
     if (iptr != nullptr) {
       ivarFunc(iptr);
     } else if (wptr != nullptr) {
       wvarFunc(wptr);
+    } else if (sptr != nullptr) {
+      isetVarFunc(sptr);
     } else {
-      taco_iassert("IndexVarInterface was not IndexVar or WindowedIndexVar");
+      taco_iassert("IndexVarInterface was not IndexVar, WindowedIndexVar or IndexSetVar");
     }
   }
 };
@@ -857,7 +912,7 @@ public:
 /// before IndexVar so that IndexVar can return objects of type WindowedIndexVar.
 class WindowedIndexVar : public util::Comparable<WindowedIndexVar>, public IndexVarInterface {
 public:
-  WindowedIndexVar(IndexVar base, int lo = -1, int hi = -1);
+  WindowedIndexVar(IndexVar base, int lo = -1, int hi = -1, int stride = 1);
   ~WindowedIndexVar() = default;
 
   /// getIndexVar returns the underlying IndexVar.
@@ -867,6 +922,31 @@ public:
   /// this index variable.
   int getLowerBound() const;
   int getUpperBound() const;
+  /// getStride returns the stride to access the window by.
+  int getStride() const;
+
+  /// getWindowSize returns the number of elements in the window.
+  int getWindowSize() const;
+
+private:
+  struct Content;
+  std::shared_ptr<Content> content;
+};
+
+/// IndexSetVar represents an IndexVar that has been projected via a set
+/// of values. For example,
+///  A(i) = B(i({1, 3, 5}))
+/// projects the elements of B to be just elements at indexes 1, 3 and 5. In
+/// this case, i({1, 3, 5}) is an IndexSetvar.
+class IndexSetVar : public util::Comparable<IndexSetVar>, public IndexVarInterface {
+public:
+  IndexSetVar(IndexVar base, std::vector<int> indexSet);
+  ~IndexSetVar() = default;
+
+  /// getIndexVar returns the underlying IndexVar.
+  IndexVar getIndexVar() const;
+  /// getIndexSet returns the index set.
+  const std::vector<int>& getIndexSet() const;
 
 private:
   struct Content;
@@ -888,7 +968,11 @@ public:
   friend bool operator<(const IndexVar&, const IndexVar&);
 
   /// Indexing into an IndexVar returns a window into it.
-  WindowedIndexVar operator()(int lo, int hi);
+  WindowedIndexVar operator()(int lo, int hi, int stride = 1);
+
+  /// Indexing into an IndexVar with a vector returns an index set into it.
+  IndexSetVar operator()(std::vector<int> indexSet);
+  IndexSetVar operator()(std::vector<int>& indexSet);
 
 private:
   struct Content;
@@ -903,11 +987,18 @@ struct WindowedIndexVar::Content {
   IndexVar base;
   int lo;
   int hi;
+  int stride;
+};
+
+struct IndexSetVar::Content {
+  IndexVar base;
+  std::vector<int> indexSet;
 };
 
 std::ostream& operator<<(std::ostream&, const std::shared_ptr<IndexVarInterface>&);
 std::ostream& operator<<(std::ostream&, const IndexVar&);
 std::ostream& operator<<(std::ostream&, const WindowedIndexVar&);
+std::ostream& operator<<(std::ostream&, const IndexSetVar&);
 
 /// A suchthat statement provides a set of IndexVarRel that constrain
 /// the iteration space for the child concrete index notation
@@ -1037,9 +1128,17 @@ std::vector<TensorVar> getArguments(IndexStmt stmt);
 /// Returns the temporaries in the index statement, in the order they appear.
 std::vector<TensorVar> getTemporaries(IndexStmt stmt);
 
+/// Returns the attribute query results in the index statement, in the order 
+/// they appear.
+std::vector<TensorVar> getAttrQueryResults(IndexStmt stmt);
+
 // [Olivia]
 /// Returns the temporaries in the index statement, in the order they appear.
 std::map<Forall, Where> getTemporaryLocations(IndexStmt stmt);
+
+/// Returns the results in the index statement that should be assembled by 
+/// ungrouped insertion.
+std::vector<TensorVar> getAssembledByUngroupedInsertion(IndexStmt stmt);
 
 /// Returns the tensors in the index statement.
 std::vector<TensorVar> getTensorVars(IndexStmt stmt);
@@ -1064,6 +1163,10 @@ std::vector<IndexVar> getReductionVars(IndexStmt stmt);
 std::vector<ir::Expr> createVars(const std::vector<TensorVar>& tensorVars,
                                  std::map<TensorVar, ir::Expr>* vars, 
                                  bool isParameter=false);
+
+/// Convert index notation tensor variables in the index statement to IR 
+/// pointer variables.
+std::map<TensorVar,ir::Expr> createIRTensorVars(IndexStmt stmt);
 
 
 /// Simplify an index expression by setting the zeroed Access expressions to

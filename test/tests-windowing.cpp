@@ -12,14 +12,14 @@ using namespace taco;
 // tensor with a mix of IndexVars and WindowedIndexVars.
 TEST(windowing, mixIndexing) {
   auto dim = 10;
-  Tensor<int> a("a", {dim, dim, dim, dim, dim}, {Dense, Dense, Dense, Dense, Dense});
+  Tensor<int> a("a", {dim, dim, dim, dim, dim}, Format{Dense, Dense, Dense, Dense, Dense});
   IndexVar i, j, k, l, m;
   auto w1 = a(i, j(1, 3), k, l(4, 5), m(6, 7));
   auto w2 = a(i(1, 3), j(2, 4), k, l, m(3, 5));
 }
 
 TEST(windowing, boundsChecks) {
-  Tensor<int> a("a", {5}, {Dense});
+  Tensor<int> a("a", {5}, Format{Dense});
   IndexVar i("i");
   ASSERT_THROWS_EXCEPTION_WITH_ERROR([&]() { a(i(-1, 4)); }, "slice lower bound");
   ASSERT_THROWS_EXCEPTION_WITH_ERROR([&]() { a(i(0, 10)); }, "slice upper bound");
@@ -29,10 +29,10 @@ TEST(windowing, boundsChecks) {
 // in the same expression.
 TEST(windowing, sliceMultipleWays) {
   auto dim = 10;
-  Tensor<int> a("a", {dim}, {Dense});
-  Tensor<int> b("b", {dim}, {Sparse});
-  Tensor<int> c("c", {dim}, {Dense});
-  Tensor<int> expected("expected", {dim}, {Dense});
+  Tensor<int> a("a", {dim}, Format{Dense});
+  Tensor<int> b("b", {dim}, Format{Sparse});
+  Tensor<int> c("c", {dim}, Format{Dense});
+  Tensor<int> expected("expected", {dim}, Format{Dense});
   for (int i = 0; i < dim; i++) {
     a.insert({i}, i);
     b.insert({i}, i);
@@ -51,28 +51,28 @@ TEST(windowing, sliceMultipleWays) {
 // of the input tensors and formats for each of the tensors in the computation.
 struct basic : public TestWithParam<std::tuple<int, ModeFormat, ModeFormat, ModeFormat>> {};
 TEST_P(basic, windowing){
-  Tensor<int> expectedAdd("expectedAdd", {2, 2}, {Dense, Dense});
+  Tensor<int> expectedAdd("expectedAdd", {2, 2}, Format{Dense, Dense});
   expectedAdd.insert({0, 0}, 14);
   expectedAdd.insert({0, 1}, 17);
   expectedAdd.insert({1, 0}, 17);
   expectedAdd.insert({1, 1}, 20);
   expectedAdd.pack();
-  Tensor<int> expectedMul("expectedMul", {2, 2}, {Dense, Dense});
+  Tensor<int> expectedMul("expectedMul", {2, 2}, Format{Dense, Dense});
   expectedMul.insert({0, 0}, 64);
   expectedMul.insert({0, 1}, 135);
   expectedMul.insert({1, 0}, 135);
   expectedMul.insert({1, 1}, 240);
   expectedMul.pack();
-  Tensor<int> d("d", {2, 2}, {Dense, Dense});
+  Tensor<int> d("d", {2, 2}, Format{Dense, Dense});
 
   // The test is parameterized by a dimension, and formats for the different tensors.
   auto dim = std::get<0>(GetParam());
   auto x = std::get<1>(GetParam());
   auto y = std::get<2>(GetParam());
   auto z = std::get<3>(GetParam());
-  Tensor<int> a("a", {dim, dim}, {Dense, x});
-  Tensor<int> b("b", {dim, dim}, {Dense, y});
-  Tensor<int> c("c", {dim, dim}, {Dense, z});
+  Tensor<int> a("a", {dim, dim}, Format{Dense, x});
+  Tensor<int> b("b", {dim, dim}, Format{Dense, y});
+  Tensor<int> c("c", {dim, dim}, Format{Dense, z});
   for (int i = 0; i < dim; i++) {
     for (int j = 0; j < dim; j++) {
       a.insert({i, j}, i + j);
@@ -111,7 +111,7 @@ INSTANTIATE_TEST_CASE_P(
 struct slicedOutput : public TestWithParam<std::tuple<ModeFormat, ModeFormat>> {};
 TEST_P(slicedOutput, windowing) {
   auto dim = 10;
-  Tensor<int> expected("expected", {10, 10}, {Dense, Dense});
+  Tensor<int> expected("expected", {10, 10}, Format{Dense, Dense});
   expected.insert({8, 8}, 12);
   expected.insert({8, 9}, 14);
   expected.insert({9, 8}, 14);
@@ -119,9 +119,9 @@ TEST_P(slicedOutput, windowing) {
   expected.pack();
   auto x = std::get<0>(GetParam());
   auto y = std::get<1>(GetParam());
-  Tensor<int> a("a", {dim, dim}, {Dense, x});
-  Tensor<int> b("b", {dim, dim}, {Dense, y});
-  Tensor<int> c("c", {dim, dim}, {Dense, Dense});
+  Tensor<int> a("a", {dim, dim}, Format{Dense, x});
+  Tensor<int> b("b", {dim, dim}, Format{Dense, y});
+  Tensor<int> c("c", {dim, dim}, Format{Dense, Dense});
   for (int i = 0; i < dim; i++) {
     for (int j = 0; j < dim; j++) {
       a.insert({i, j}, i + j);
@@ -152,15 +152,15 @@ TEST_P(matrixMultiply, windowing) {
   auto dim = 10;
   auto windowDim = 4;
 
-  Tensor<int> a("a", {windowDim, windowDim}, {Dense, Dense});
-  Tensor<int> b("b", {windowDim, windowDim}, {Dense, Dense});
-  Tensor<int> c("c", {windowDim, windowDim}, {Dense, Dense});
-  Tensor<int> expected("expected", {windowDim, windowDim}, {Dense, Dense});
+  Tensor<int> a("a", {windowDim, windowDim}, Format{Dense, Dense});
+  Tensor<int> b("b", {windowDim, windowDim}, Format{Dense, Dense});
+  Tensor<int> c("c", {windowDim, windowDim}, Format{Dense, Dense});
+  Tensor<int> expected("expected", {windowDim, windowDim}, Format{Dense, Dense});
 
   auto x = std::get<0>(GetParam());
   auto y = std::get<1>(GetParam());
-  Tensor<int> aw("aw", {dim, dim}, {Dense, x});
-  Tensor<int> bw("bw", {dim, dim}, {Dense, y});
+  Tensor<int> aw("aw", {dim, dim}, Format{Dense, x});
+  Tensor<int> bw("bw", {dim, dim}, Format{Dense, y});
   for (int i = 0; i < dim; i++) {
     for (int j = 0; j < dim; j++) {
       aw.insert({i, j}, i + j);
@@ -198,17 +198,17 @@ struct workspace : public TestWithParam<std::tuple<ModeFormat, ModeFormat>> {};
 TEST_P(workspace, windowing) {
   auto dim = 10;
   size_t windowDim = 4;
-  Tensor<int> d("d", {static_cast<int>(windowDim)}, {Dense});
-  Tensor<int> expected("expected", {static_cast<int>(windowDim)}, {Dense});
+  Tensor<int> d("d", {static_cast<int>(windowDim)}, Format{Dense});
+  Tensor<int> expected("expected", {static_cast<int>(windowDim)}, Format{Dense});
   expected.insert({0}, 8); expected.insert({1}, 11);
   expected.insert({2}, 14); expected.insert({3}, 17);
   expected.pack();
 
   auto x = std::get<0>(GetParam());
   auto y = std::get<1>(GetParam());
-  Tensor<int> a("a", {dim}, {x});
-  Tensor<int> b("b", {dim}, {y});
-  Tensor<int> c("c", {dim}, {Dense});
+  Tensor<int> a("a", {dim}, Format{x});
+  Tensor<int> b("b", {dim}, Format{y});
+  Tensor<int> c("c", {dim}, Format{Dense});
   for (int i = 0; i < dim; i++) {
     a.insert({i}, i);
     b.insert({i}, i);
@@ -237,7 +237,7 @@ INSTANTIATE_TEST_CASE_P(
 // transformations and different mode formats.
 TEST(windowing, transformations) {
   auto dim = 10;
-  Tensor<int> expected("expected", {2, 2}, {Dense, Dense});
+  Tensor<int> expected("expected", {2, 2}, Format{Dense, Dense});
   expected.insert({0, 0}, 12);
   expected.insert({0, 1}, 14);
   expected.insert({1, 0}, 14);
@@ -300,20 +300,20 @@ TEST_P(assignment, windowing) {
   IndexVar i, j;
 
   // First assign a window of A to a window of B.
-  Tensor<int> B("B", {dim, dim}, {Dense, Dense});
+  Tensor<int> B("B", {dim, dim}, Format{Dense, Dense});
   B(i(2, 4), j(3, 5)) = A(i(4, 6), j(5, 7));
   B.evaluate();
-  Tensor<int> expected("expected", {dim, dim}, {Dense, Dense});
+  Tensor<int> expected("expected", {dim, dim}, Format{Dense, Dense});
   expected.insert({2, 3}, 9); expected.insert({2, 4}, 10);
   expected.insert({3, 3}, 10); expected.insert({3, 4}, 11);
   expected.pack();
   ASSERT_TRUE(equals(B, expected)) << B << std::endl << expected << std::endl;
 
   // Assign a window of A to b.
-  B = Tensor<int>("B", {2, 2}, {Dense, Dense});
+  B = Tensor<int>("B", {2, 2}, Format{Dense, Dense});
   B(i, j) = A(i(4, 6), j(5, 7));
   B.evaluate();
-  expected = Tensor<int>("expected", {2, 2}, {Dense, Dense});
+  expected = Tensor<int>("expected", {2, 2}, Format{Dense, Dense});
   expected.insert({0, 0}, 9); expected.insert({0, 1}, 10);
   expected.insert({1, 0}, 10); expected.insert({1, 1}, 11);
   expected.pack();
@@ -324,10 +324,10 @@ TEST_P(assignment, windowing) {
   A.insert({0, 0}, 0); A.insert({0, 1}, 1);
   A.insert({1, 0}, 1); A.insert({1, 1}, 2);
   A.pack();
-  B = Tensor<int>("B", {dim, dim}, {Dense, Dense});
+  B = Tensor<int>("B", {dim, dim}, Format{Dense, Dense});
   B(i(4, 6), j(5, 7)) = A(i, j);
   B.evaluate();
-  expected = Tensor<int>("expected", {dim, dim}, {Dense, Dense});
+  expected = Tensor<int>("expected", {dim, dim}, Format{Dense, Dense});
   expected.insert({4, 5}, 0); expected.insert({4, 6}, 1);
   expected.insert({5, 5}, 1); expected.insert({5, 6}, 2);
   expected.pack();
@@ -347,16 +347,16 @@ TEST_P(cuda, windowing) {
     return;
   }
   auto dim = 10;
-  Tensor<int> expected("expected", {2, 2}, {Dense, Dense});
+  Tensor<int> expected("expected", {2, 2}, Format{Dense, Dense});
   expected.insert({0, 0}, 12); expected.insert({0, 1}, 14);
   expected.insert({1, 0}, 14); expected.insert({1, 1}, 16);
   expected.pack();
 
   auto x = std::get<0>(GetParam());
   auto y = std::get<1>(GetParam());
-  Tensor<int> a("a", {dim, dim}, {Dense, x});
-  Tensor<int> b("b", {dim, dim}, {Dense, y});
-  Tensor<int> c("c", {2, 2}, {Dense, Dense});
+  Tensor<int> a("a", {dim, dim}, Format{Dense, x});
+  Tensor<int> b("b", {dim, dim}, Format{Dense, y});
+  Tensor<int> c("c", {2, 2}, Format{Dense, Dense});
 
   for (int i = 0; i < dim; i++) {
     for (int j = 0; j < dim; j++) {
@@ -384,3 +384,149 @@ INSTANTIATE_TEST_CASE_P(
     cuda,
     Combine(Values(Dense, Sparse), Values(Dense, Sparse))
 );
+
+// stride tests that tensor windows can be accessed with a stride. It is parameterized
+// by formats of the used tensors.
+struct stride : public TestWithParam<std::tuple<ModeFormat, ModeFormat>> {};
+TEST_P(stride, windowing) {
+  auto dim = 10;
+  Tensor<int> expectedAdd("expectedAdd", {2, 2}, {Dense, Dense});
+  expectedAdd.insert({0, 0}, 0); expectedAdd.insert({0, 1}, 10);
+  expectedAdd.insert({1, 0}, 10); expectedAdd.insert({1, 1}, 20);
+  expectedAdd.pack();
+  Tensor<int> expectedAssign("expectedAssign", {2, 2}, {Dense, Dense});
+  expectedAssign.insert({0, 0}, 0); expectedAssign.insert({0, 1}, 5);
+  expectedAssign.insert({1, 0}, 5); expectedAssign.insert({1, 1}, 10);
+  expectedAssign.pack();
+
+  Tensor<int> expectedMul("expectedMul", {2, 2}, {Dense, Dense});
+  expectedMul.insert({0, 0}, 0); expectedMul.insert({0, 1}, 25);
+  expectedMul.insert({1, 0}, 25); expectedMul.insert({1, 1}, 100);
+  expectedMul.pack();
+
+  auto x = std::get<0>(GetParam());
+  auto y = std::get<1>(GetParam());
+  Tensor<int> a("a", {dim, dim}, {Dense, x});
+  Tensor<int> b("b", {dim, dim}, {Dense, y});
+  Tensor<int> c("c", {2, 2}, {Dense, Dense});
+  for (int i = 0; i < dim; i++) {
+    for (int j = 0; j < dim; j++) {
+      a.insert({i, j}, i+j);
+      b.insert({i, j}, i+j);
+    }
+  }
+  a.pack(); b.pack();
+
+  IndexVar i("i"), j("j");
+
+  // Test a strided assignment.
+  c(i, j) = a(i(0, 10, 5), j(0, 10, 5));
+  c.evaluate();
+  ASSERT_TRUE(equals(c, expectedAssign)) << c << endl << expectedAssign << endl << x << " " << y << endl;
+
+  // Test a strided addition.
+  c(i, j) = a(i(0, 10, 5), j(0, 10, 5)) + b(i(0, 10, 5), j(0, 10, 5));
+  c.evaluate();
+  ASSERT_TRUE(equals(c, expectedAdd)) << c << endl << expectedAdd << endl;
+
+  // Test a strided multiplication.
+  c(i, j) = a(i(0, 10, 5), j(0, 10, 5)) * b(i(0, 10, 5), j(0, 10, 5));
+  c.evaluate();
+  ASSERT_TRUE(equals(c, expectedMul)) << c << endl << expectedMul << endl;
+}
+INSTANTIATE_TEST_CASE_P(
+    windowing,
+    stride,
+    Combine(Values(Dense, Sparse), Values(Dense, Sparse))
+);
+
+// indexSet tests that tensors can be windowed by a user provided set
+// of elements. The test is parameterized by formats of the tested tensors.
+struct indexSetVectors : public TestWithParam<std::tuple<ModeFormat, ModeFormat, ModeFormat>> {};
+TEST_P(indexSetVectors, windowing) {
+  auto dim = 10;
+  auto x = std::get<0>(GetParam());
+  auto y = std::get<1>(GetParam());
+  auto z = std::get<2>(GetParam());
+
+  Tensor<int> a("a", {3}, x);
+  Tensor<int> b("b", {dim}, y);
+  Tensor<int> c("c", {dim}, z);
+  Tensor<int> expected("expected", {3}, Dense);
+  for (int i = 0; i < dim; i++) {
+    b.insert({i}, i);
+    c.insert({i}, i);
+  }
+  expected.insert({0}, 1); expected.insert({1}, 9); expected.insert({2}, 25);
+  b.pack(); c.pack(); expected.pack();
+
+  IndexVar i("i");
+  a(i) = b(i({1, 3, 5})) * c(i({1, 3, 5}));
+  a.evaluate();
+  ASSERT_TRUE(equals(a, expected)) << a << endl << expected << endl << x << " " << y << endl;
+
+  expected = Tensor<int>("expected", {3}, Dense);
+  expected.insert({0}, 2); expected.insert({1}, 6); expected.insert({2}, 10); expected.pack();
+  a(i) = b(i({1, 3, 5})) + c(i({1, 3, 5}));
+  a.evaluate();
+  ASSERT_TRUE(equals(a, expected)) << a << endl << expected << endl << x << " " << y << endl;
+}
+INSTANTIATE_TEST_CASE_P(
+    windowing,
+    indexSetVectors,
+    Combine(Values(Dense, Sparse), Values(Dense, Sparse), Values(Dense, Sparse))
+);
+
+struct indexSetMatrices : public TestWithParam<std::tuple<ModeFormat, ModeFormat, ModeFormat>> {};
+TEST_P(indexSetMatrices, windowing) {
+  auto dim = 10;
+  auto x = std::get<0>(GetParam());
+  auto y = std::get<1>(GetParam());
+  auto z = std::get<2>(GetParam());
+
+  Tensor<int> a("a", {3, 3}, {Dense, x});
+  Tensor<int> expected("expected", {3, 3}, {Dense, Dense});
+  Tensor<int> b("b", {dim, dim}, {Dense, y});
+  Tensor<int> c("c", {dim, dim}, {Dense, z});
+  for (int i = 0; i < dim; i++) {
+    for (int j = 0; j < dim; j++) {
+      b.insert({i, j}, i + j);
+      c.insert({i, j}, i + j);
+    }
+  }
+  expected.insert({0, 0}, 10); expected.insert({0, 1}, 14); expected.insert({0, 2}, 18);
+  expected.insert({1, 0}, 14); expected.insert({1, 1}, 18); expected.insert({1, 2}, 22);
+  expected.insert({2, 0}, 18); expected.insert({2, 1}, 22); expected.insert({2, 2}, 26);
+  b.pack(); c.pack(); expected.pack();
+
+  IndexVar i("i"), j("j");
+  a(i, j) = b(i({1, 3, 5}), j({2, 4, 6})) + c(i({3, 5, 7}), j({4, 6, 8}));
+  a.compile();
+  a.evaluate();
+  ASSERT_TRUE(equals(a, expected)) << a << endl << expected << endl;
+}
+INSTANTIATE_TEST_CASE_P(
+    windowing,
+    indexSetMatrices,
+    Combine(Values(Dense, Sparse), Values(Dense, Sparse), Values(Dense, Sparse))
+);
+
+// lhsIndexSet tests that assignments into tensors with indexSets.
+TEST(windowing, lhsIndexSet) {
+  auto dim = 10;
+  Tensor<int> a("a", {dim}, Dense);
+  Tensor<int> expected("expected", {dim}, Dense);
+  Tensor<int> b("b", {3}, Dense);
+
+  for (int i = 0; i < 3; i++) {
+    b.insert({i}, i+1);
+  }
+  expected.insert({1}, 1); expected.insert({3}, 2); expected.insert({5}, 3);
+  b.pack(); expected.pack();
+
+  IndexVar i("i");
+  a(i({1, 3, 5})) = b(i);
+  a.compile();
+  a.evaluate();
+  ASSERT_TRUE(equals(a, expected)) << a << endl << expected << endl;
+}

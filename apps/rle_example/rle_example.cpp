@@ -142,6 +142,8 @@ void matrix_rle_compute(){
   t_res(i,j) = r1(i,j) + r2(i,j);
   t_res.evaluate();
 
+  t_res.getTacoTensorT();
+
 //  std::cout << r1 << std::endl << std::endl;
 //  std::cout << r2 << std::endl << std::endl;
   std::cout << t_res << std::endl << std::endl;
