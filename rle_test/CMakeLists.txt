@@ -1,0 +1,71 @@
+cmake_minimum_required(VERSION 2.8.12)
+project(rle_bench_vec)
+
+find_package(benchmark REQUIRED)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+#file(GLOB SOURCE_CODE ${PROJECT_SOURCE_DIR}/*.cpp)
+add_executable(${PROJECT_NAME} main.cpp)
+
+# To let the app be a standalone project
+if(NOT TACO_INCLUDE_DIR)
+  if(NOT DEFINED ENV{TACO_INCLUDE_DIR} OR NOT DEFINED ENV{TACO_LIBRARY_DIR})
+    message(FATAL_ERROR "Set the environment variables TACO_INCLUDE_DIR and TACO_LIBRARY_DIR")
+  endif()
+  set(TACO_INCLUDE_DIR $ENV{TACO_INCLUDE_DIR})
+  set(TACO_LIBRARY_DIR $ENV{TACO_LIBRARY_DIR})
+  find_library(taco taco ${TACO_LIBRARY_DIR})
+  target_link_libraries(${PROJECT_NAME} LINK_PUBLIC ${taco} benchmark::benchmark)
+else()
+  set_target_properties("${PROJECT_NAME}" PROPERTIES OUTPUT_NAME "taco-${PROJECT_NAME}")
+  target_link_libraries(${PROJECT_NAME} LINK_PUBLIC taco benchmark::benchmark)
+endif()
+
+# Include taco headers
+include_directories(${TACO_INCLUDE_DIR})
+
+add_executable(rle_bench_mat bench_mat.cpp)
+# To let the app be a standalone project
+if(NOT TACO_INCLUDE_DIR)
+  if(NOT DEFINED ENV{TACO_INCLUDE_DIR} OR NOT DEFINED ENV{TACO_LIBRARY_DIR})
+    message(FATAL_ERROR "Set the environment variables TACO_INCLUDE_DIR and TACO_LIBRARY_DIR")
+  endif()
+  set(TACO_INCLUDE_DIR $ENV{TACO_INCLUDE_DIR})
+  set(TACO_LIBRARY_DIR $ENV{TACO_LIBRARY_DIR})
+  find_library(taco taco ${TACO_LIBRARY_DIR})
+  target_link_libraries(manual LINK_PUBLIC ${taco} benchmark::benchmark)
+else()
+  set_target_properties("rle_bench_mat" PROPERTIES OUTPUT_NAME "taco-rle_bench_mat")
+  target_link_libraries(rle_bench_mat LINK_PUBLIC taco benchmark::benchmark)
+endif()
+
+
+add_executable(manual manual.cpp temp_vec.c)
+# To let the app be a standalone project
+if(NOT TACO_INCLUDE_DIR)
+  if(NOT DEFINED ENV{TACO_INCLUDE_DIR} OR NOT DEFINED ENV{TACO_LIBRARY_DIR})
+    message(FATAL_ERROR "Set the environment variables TACO_INCLUDE_DIR and TACO_LIBRARY_DIR")
+  endif()
+  set(TACO_INCLUDE_DIR $ENV{TACO_INCLUDE_DIR})
+  set(TACO_LIBRARY_DIR $ENV{TACO_LIBRARY_DIR})
+  find_library(taco taco ${TACO_LIBRARY_DIR})
+  target_link_libraries(manual LINK_PUBLIC ${taco} benchmark::benchmark)
+else()
+  set_target_properties("manual" PROPERTIES OUTPUT_NAME "taco-manual")
+  target_link_libraries(manual LINK_PUBLIC taco benchmark::benchmark)
+endif()
+
+add_executable(random_data random_data.cpp)
+# To let the app be a standalone project
+if(NOT TACO_INCLUDE_DIR)
+  if(NOT DEFINED ENV{TACO_INCLUDE_DIR} OR NOT DEFINED ENV{TACO_LIBRARY_DIR})
+    message(FATAL_ERROR "Set the environment variables TACO_INCLUDE_DIR and TACO_LIBRARY_DIR")
+  endif()
+  set(TACO_INCLUDE_DIR $ENV{TACO_INCLUDE_DIR})
+  set(TACO_LIBRARY_DIR $ENV{TACO_LIBRARY_DIR})
+  find_library(taco taco ${TACO_LIBRARY_DIR})
+  target_link_libraries(random_data LINK_PUBLIC ${taco} benchmark::benchmark)
+else()
+  set_target_properties("random_data" PROPERTIES OUTPUT_NAME "taco-random-data")
+  target_link_libraries(random_data LINK_PUBLIC taco benchmark::benchmark)
+endif()

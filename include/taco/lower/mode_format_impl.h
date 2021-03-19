@@ -108,7 +108,7 @@ public:
                  bool isBranchless, bool isCompact, bool isZeroless, 
                  bool hasCoordValIter, bool hasCoordPosIter, bool hasLocate, 
                  bool hasInsert, bool hasAppend, bool hasSeqInsertEdge, 
-                 bool hasInsertCoord, bool isYieldPosPure, bool hasRepeatIter);
+                 bool hasInsertCoord, bool isYieldPosPure, bool hasRepeatIter = false);
 
   virtual ~ModeFormatImpl();
 

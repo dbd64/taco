@@ -63,23 +63,18 @@ namespace taco {
     vector<Expr> RLEModeFormat::getArrays(Expr tensor, int mode,
                                                  int level) const {
         std::string arraysName = util::toString(tensor) + std::to_string(level);
-        return {GetProperty::make(tensor, TensorProperty::Dimension, mode),
-                GetProperty::make(tensor, TensorProperty::Indices,
+        return {GetProperty::make(tensor, TensorProperty::Indices,
                                   level - 1, 0, arraysName + "_pos"),
                 GetProperty::make(tensor, TensorProperty::Indices,
                                   level - 1, 1, arraysName + "_rle")};
     }
 
-    Expr RLEModeFormat::getSizeArray(ModePack pack) const {
+    Expr RLEModeFormat::getPosArray(ModePack pack) const {
         return pack.getArray(0);
     }
 
-    Expr RLEModeFormat::getPosArray(ModePack pack) const {
-        return pack.getArray(1);
-    }
-
     Expr RLEModeFormat::getRleArray(ModePack pack) const {
-        return pack.getArray(2);
+        return pack.getArray(1);
     }
 
     Expr RLEModeFormat::getValsArray(Mode mode) const {
@@ -111,9 +106,10 @@ namespace taco {
     }
 
     Expr RLEModeFormat::getWidth(Mode mode) const {
-        return (mode.getSize().isFixed() && mode.getSize().getSize() < 16) ?
+      return (mode.getSize().isFixed() && mode.getSize().getSize() < 16) ?
                (int)mode.getSize().getSize() :
-               getSizeArray(mode.getModePack());
+             (taco_ierror, 0);
+              // getSizeArray(mode.getModePack());
     }
 
     bool RLEModeFormat::equals(const ModeFormatImpl& other) const {

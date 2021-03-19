@@ -57,9 +57,6 @@ namespace taco {
 
     protected:
         // We use a pos array to distinguish different rows/cols/modes,
-        // and a single element `size` which is the unpacked size of
-        // each row
-        ir::Expr getSizeArray(ModePack pack) const;
         ir::Expr getPosArray(ModePack pack) const;
         ir::Expr getRleArray(ModePack pack) const;
 

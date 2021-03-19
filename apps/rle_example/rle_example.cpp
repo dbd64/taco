@@ -113,7 +113,9 @@ void matrix_rle_compute(){
   Format  rlem({Dense, RLE});
   IndexVar i,j;
 
-  Tensor<double> t1("t1", {2,3}, dm);
+  auto dims= {2,3};
+
+  Tensor<double> t1("t1", dims, dm);
   t1(0,0) = 12;
   t1(0,1) = 12;
   t1(0,2) = 13;
@@ -121,8 +123,8 @@ void matrix_rle_compute(){
   t1(1,1) = 12;
   t1(1,2) = 13;
 
-  Tensor<double> r1("rFIRST", {2,3},  rlem);
-  Tensor<double> r2("rSECOND", {2,3},  rlem);
+  Tensor<double> r1("rFIRST", dims,  rlem);
+  Tensor<double> r2("rSECOND", dims,  rlem);
 
   r1(i,j) = t1(i,j);
   r1.setAssembleWhileCompute(true);
@@ -138,14 +140,10 @@ void matrix_rle_compute(){
   std::cout << r2 << std::endl << std::endl;
 
 
-  Tensor<double> t_res("RESULT", {2,3}, dm);
+  Tensor<double> t_res("RESULT", dims, dm);
   t_res(i,j) = r1(i,j) + r2(i,j);
   t_res.evaluate();
 
-  t_res.getTacoTensorT();
-
-//  std::cout << r1 << std::endl << std::endl;
-//  std::cout << r2 << std::endl << std::endl;
   std::cout << t_res << std::endl << std::endl;
 }
 
@@ -153,6 +151,6 @@ int main(int argc, char* argv[]) {
   vector();
   matrix();
   vector_rle_compute();
-//  matrix_rle_compute();
+  matrix_rle_compute();
   std::cout << "Done" << std::endl;
 }

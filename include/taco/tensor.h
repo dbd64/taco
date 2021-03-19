@@ -527,9 +527,10 @@ private:
   template <typename CType>
   void reinsertPackedComponents();
 
+public:
   struct Content;
   std::shared_ptr<Content> content;
-
+private:
   typedef std::vector<std::tuple<Format,
                                  Datatype,
                                  std::vector<int>,
