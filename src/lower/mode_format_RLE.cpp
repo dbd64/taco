@@ -261,7 +261,10 @@ namespace taco {
       Expr rleArray = getRleArray(mode.getModePack());
       Expr stride = (int)mode.getModePack().getNumModes();
 
-      Stmt storeIdx = Store::make(rleArray, ir::Mul::make(pos, stride), repeat); // Right now every new value has a run length of 1
+      Expr rle_pos = ir::Mul::make(pos, stride);
+      Expr repeat_sum = ir::Add::make(repeat, ir::Load::make(rleArray, rle_pos));
+
+      Stmt storeIdx = Store::make(rleArray, rle_pos, repeat_sum);
 
       if (mode.getModePack().getNumModes() > 1) {
         return storeIdx;

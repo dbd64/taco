@@ -1919,8 +1919,9 @@ Stmt LowererImpl::lowerMergeRepeats(MergeLattice pointLattice,
     vector<Stmt> bodyStmts;
 
     bodyStmts.push_back(Assign::make(locCountVar, ir::Sub::make(locCountVar, locDistanceVar)));
+
     bodyStmts.push_back(appender.getAppendRepeat(ir::Sub::make(appender.getPosVar(), 1),
-                                                 repeatIters[0].getCoordVar(), ir::Add::make(locCountVar,1)));
+                                                 repeatIters[0].getCoordVar(), locCountVar));
 
     repBody = Block::make(bodyStmts);
   } else {
