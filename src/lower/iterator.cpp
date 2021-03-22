@@ -251,6 +251,13 @@ bool Iterator::hasRepeatIter() const {
   return getMode().defined() && getMode().getModeFormat().hasRepeatIter();
 }
 
+bool Iterator::hasRepeatAppend() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().hasRepeatAppend();
+}
+
+
 bool Iterator::hasSeqInsertEdge() const {
   taco_iassert(defined());
   if (isDimensionIterator()) return false;
@@ -306,6 +313,12 @@ ModeFunction Iterator::repeatAccess(const ir::Expr& pos,
   taco_iassert(defined() && content->mode.defined());
   return getMode().getModeFormat().impl->repeatIterAccess(pos, coords, getMode());
 }
+
+ir::Stmt Iterator::getAppendRepeat(const ir::Expr& p, const ir::Expr& i, const ir::Expr& r) const {
+  taco_iassert(defined() && content->mode.defined());
+  return content->mode.getModeFormat().impl->getAppendRepeat(p, i, r, content->mode);
+}
+
 
 
 ModeFunction Iterator::locate(const std::vector<ir::Expr>& coords) const {

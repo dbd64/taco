@@ -73,11 +73,11 @@ std::pair<Tensor<T>, Tensor<T>> gen_random_rle(std::string name, int size= 100, 
 
   return {r,d};
 }
-std::vector<std::pair<int,int>> rle_ranges =
+std::vector<std::pair<int,int>> rle_ranges = //{{1,10}, {1,1024}, {1024,2048}};
         {{1,512}, {1,1024}, {512,1024}, {1000,10000},
          {10000,100000}, {1, 10}};
-constexpr int size_lower = 100;
-constexpr int size_upper = 100'000;
+constexpr int size_lower = 10;
+constexpr int size_upper = 10'000'000;
 constexpr int size_mult = 10;
 constexpr int val_lower = 1;
 constexpr int val_upper = 100;
@@ -110,11 +110,16 @@ static void BM_dense_sum(benchmark::State& state) {
   auto& res = ts[{tsize, upperVal, lRle, uRle}];
   for (auto _ : state) {
     for(int j=0; j<numRandTensors; j++) {
+      state.PauseTiming();
       auto [r0, d0] = res[2*j];
       auto [r1, d1] = res[2*j+1];
       Tensor<double> expected("expected_", {tsize}, dv);
       expected(i) = d0(i) + d1(i);
-      expected.evaluate();
+      expected.compile();
+      expected.assemble();
+      
+      state.ResumeTiming();
+      expected.compute();
     }
   }
 }
@@ -131,12 +136,16 @@ static void BM_rle_sum(benchmark::State& state) {
   auto& res = ts[{tsize, upperVal, lRle, uRle}];
   for (auto _ : state) {
     for(int j=0; j<numRandTensors; j++) {
+      state.PauseTiming();
       auto [r0, d0] = res[2*j];
       auto [r1, d1] = res[2*j+1];
-
-      Tensor<double> expected("expected_", {tsize}, dv);
+      Tensor<double> expected("expected_", {tsize}, rv);
+      expected.setAssembleWhileCompute(true);                                 \
       expected(i) = r0(i) + r1(i);
-      expected.evaluate();
+      expected.compile();
+
+      state.ResumeTiming();
+      expected.compute();
     }
   }
 }

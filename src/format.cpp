@@ -283,6 +283,11 @@ bool ModeFormat::hasRepeatIter() const {
   return impl->hasRepeatIter;
 }
 
+bool ModeFormat::hasRepeatAppend() const {
+  taco_iassert(defined());
+  return impl->hasRepeatAppend;
+}
+
 bool ModeFormat::hasSeqInsertEdge() const {
   taco_iassert(defined());
   return impl->hasSeqInsertEdge;

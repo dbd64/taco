@@ -29,7 +29,7 @@ namespace taco {
     RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, bool includeComments, long long allocSize) :
             ModeFormatImpl("rle", isFull, true, isUnique, false, true, false,
                            true, false, false, false, true,
-                           false, false, false, true),
+                           false, false, false, true, true),
             includeComments(includeComments), allocSize(allocSize) {
     }
 
@@ -254,6 +254,23 @@ namespace taco {
 
       return Block::make({c0, IfThenElse::make(ifCond,thenBlock,otherwiseBlock), c1});
     }
+
+    ir::Stmt RLEModeFormat::getAppendRepeat(ir::Expr pos, ir::Expr coord, ir::Expr repeat, Mode mode) const {
+      taco_iassert(mode.getPackLocation() == 0);
+
+      Expr rleArray = getRleArray(mode.getModePack());
+      Expr stride = (int)mode.getModePack().getNumModes();
+
+      Stmt storeIdx = Store::make(rleArray, ir::Mul::make(pos, stride), repeat); // Right now every new value has a run length of 1
+
+      if (mode.getModePack().getNumModes() > 1) {
+        return storeIdx;
+      }
+
+      Stmt maybeResizeIdx = doubleSizeIfFull(rleArray, getRleCapacity(mode), pos);
+      return Block::make({maybeResizeIdx, storeIdx});
+    }
+
 
     ir::Stmt RLEModeFormat::getAppendEdges(ir::Expr parentPos, ir::Expr posBegin, ir::Expr posEnd, Mode mode) const {
       Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendEdges!    --") : Stmt();

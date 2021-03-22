@@ -139,6 +139,7 @@ public:
   bool hasInsert() const;
   bool hasAppend() const;
   bool hasRepeatIter() const;
+  bool hasRepeatAppend() const;
 
   /// Returns true if a mode format has ungrouped insertion functions with 
   /// specific attributes, false otherwise

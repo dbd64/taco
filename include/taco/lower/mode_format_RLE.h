@@ -34,6 +34,7 @@ namespace taco {
 
         ModeFunction repeatIterBounds(ir::Expr parentPos, Mode mode) const override;
         ModeFunction repeatIterAccess(ir::Expr pos, std::vector<ir::Expr> coords, Mode mode) const override;
+        ir::Stmt getAppendRepeat(ir::Expr p, ir::Expr i, ir::Expr r, Mode mode) const override;
 
         ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;
 

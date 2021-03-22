@@ -1868,19 +1868,6 @@ Stmt LowererImpl::lowerMergeRepeats(MergeLattice pointLattice,
   MergePoint point = pointLattice.points().front();
   vector<Iterator> repeatIters = point.mergers();
 
-//  /* TODO: LowererImpl::lowerMergeRepeats */
-//  r02_pos_off = (r02_pos_off + 1) % COUNT;
-//  jr0 = r02_pos_save + r02_pos_off;
-//  int32_t jt0 = i * t02_dimension + j;
-//  t0_vals[jt0] = r0_vals[jr0];
-//  j++;
-//  r02_rep_iter++;
-//  if(r02_rep_iter == r02_rle[jr0]){
-//    jr0++;
-//    r02_rep_iter = 0;
-//  }
-//
-
   vector<Expr> lenOps;
   vector<Expr> countOps;
   for(auto& iterator : repeatIters){
@@ -1925,28 +1912,47 @@ Stmt LowererImpl::lowerMergeRepeats(MergeLattice pointLattice,
             Block::make(forBody)));
 
 
-  Expr copyIterVar = Var::make("copy_iter", Int());
+  Stmt repBody;
+  if(appenders.size() == 1 && appenders[0].hasRepeatAppend()){
+    Iterator appender = appenders[0];
+    auto appenderPos = appender.getPosVar();
+    vector<Stmt> bodyStmts;
 
-  // Hack to get LHS of body expression
-  vector<Stmt> bodyStmts;
-  bodyStmts.push_back(VarDecl::make(coordinate, repeatIters[0].getCoordVar())); // HACK as RLE is fulls
-  if(isa<Block>(singlePopBody)){
-    const Block* body = ir::to<Block>(singlePopBody);
-    for(unsigned long i=0; i < body->contents.size()-1; i++) {
-      bodyStmts.push_back(body->contents[i]);
-    }
-    Stmt last = body->contents[body->contents.size()-1];
-    if(isa<Store>(last)){
-      const Store* s = ir::to<Store>(last);
-      bodyStmts.push_back(Store::make(s->arr, ir::Add::make(s->loc, copyIterVar),
-                  Load::make(s->arr, ir::Add::make(ir::Sub::make(s->loc, locDistanceVar), copyIterVar))));
-    } else {
+    bodyStmts.push_back(Assign::make(locCountVar, ir::Sub::make(locCountVar, locDistanceVar)));
+    bodyStmts.push_back(appender.getAppendRepeat(ir::Sub::make(appender.getPosVar(), 1),
+                                                 repeatIters[0].getCoordVar(), ir::Add::make(locCountVar,1)));
+
+    repBody = Block::make(bodyStmts);
+  } else {
+    Expr copyIterVar = Var::make("copy_iter", Int());
+
+    // Hack to get LHS of body expression
+    vector<Stmt> bodyStmts;
+    bodyStmts.push_back(VarDecl::make(coordinate, repeatIters[0].getCoordVar())); // HACK as RLE is fulls
+    if(isa<Block>(singlePopBody)){
+      const Block* body = ir::to<Block>(singlePopBody);
+      for(unsigned long i=0; i < body->contents.size()-1; i++) {
+        bodyStmts.push_back(body->contents[i]);
+      }
+      Stmt last = body->contents[body->contents.size()-1];
+      if(isa<Store>(last)){
+        const Store* s = ir::to<Store>(last);
+        bodyStmts.push_back(Store::make(s->arr, ir::Add::make(s->loc, copyIterVar),
+                                        Load::make(s->arr, ir::Add::make(ir::Sub::make(s->loc, locDistanceVar), copyIterVar))));
+      } else {
+        taco_iassert("Hack did not work :( ");
+      }
+    } else{
       taco_iassert("Hack did not work :( ");
     }
-  } else{
-    taco_iassert("Hack did not work :( ");
-  }
 
+    repBody = Block::make(
+            Assign::make(locCountVar, ir::Sub::make(locCountVar, locDistanceVar)),
+            For::make(copyIterVar, 0, locCountVar, 1,
+                      Block::make(bodyStmts)
+            ));
+
+  }
 
   vector<Stmt> stmtsFixup;
   for(auto& iterator: repeatIters){
@@ -1959,21 +1965,15 @@ Stmt LowererImpl::lowerMergeRepeats(MergeLattice pointLattice,
     stmtsFixup.push_back(Assign::make(repIterVar, ir::Add::make(repIterVar, locCountVar)));
     stmtsFixup.push_back(Assign::make(coord, ir::Add::make(coord, locCountVar)));
     stmtsFixup.push_back(IfThenElse::make(Eq::make(repIterVar, count),
-                                    Block::make(Assign::make(repIterVar, 0),
-                                         Assign::make(pos, ir::Add::make(pos,1))
+                                          Block::make(Assign::make(repIterVar, 0),
+                                                      Assign::make(pos, ir::Add::make(pos,1))
                                           )));
   }
-
-  Stmt repBody = Block::make(
-          Assign::make(locCountVar, ir::Sub::make(locCountVar, locDistanceVar)),
-                For::make(copyIterVar, 0, locCountVar, 1,
-                          Block::make(bodyStmts)
-                          ),
-                Block::make(stmtsFixup)
-          );
+  Stmt fixup = Block::make(stmtsFixup);
 
   stmts.push_back(IfThenElse::make(Gt::make(locCountVar, locDistanceVar),
-                                   repBody));
+                                   Block::make(repBody, fixup)));
+
 
 
   vector<Expr> result;

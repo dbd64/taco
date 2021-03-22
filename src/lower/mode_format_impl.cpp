@@ -151,13 +151,14 @@ ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull,
                                bool hasCoordValIter, bool hasCoordPosIter, 
                                bool hasLocate, bool hasInsert, bool hasAppend, 
                                bool hasSeqInsertEdge, bool hasInsertCoord,
-                               bool isYieldPosPure, bool hasRepeatIter) :
+                               bool isYieldPosPure, bool hasRepeatIter, bool hasRepeatAppend) :
     name(name), isFull(isFull), isOrdered(isOrdered), isUnique(isUnique),
     isBranchless(isBranchless), isCompact(isCompact), isZeroless(isZeroless),
     hasCoordValIter(hasCoordValIter), hasCoordPosIter(hasCoordPosIter),
     hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend),
     hasSeqInsertEdge(hasSeqInsertEdge), hasInsertCoord(hasInsertCoord),
-    isYieldPosPure(isYieldPosPure), hasRepeatIter(hasRepeatIter) {
+    isYieldPosPure(isYieldPosPure), hasRepeatIter(hasRepeatIter),
+    hasRepeatAppend(hasRepeatAppend) {
 }
 
 ModeFormatImpl::~ModeFormatImpl() {
@@ -211,7 +212,12 @@ ModeFunction ModeFormatImpl::repeatIterAccess(ir::Expr pos,
   return ModeFunction();
 }
 
-  
+Stmt
+ModeFormatImpl::getAppendRepeat(ir::Expr p, ir::Expr i, ir::Expr r, Mode mode) const {
+  return Stmt();
+}
+
+
 Stmt ModeFormatImpl::getInsertCoord(Expr p,
     const std::vector<Expr>& i, Mode mode) const {
   return Stmt();

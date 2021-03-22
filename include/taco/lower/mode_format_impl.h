@@ -108,7 +108,8 @@ public:
                  bool isBranchless, bool isCompact, bool isZeroless, 
                  bool hasCoordValIter, bool hasCoordPosIter, bool hasLocate, 
                  bool hasInsert, bool hasAppend, bool hasSeqInsertEdge, 
-                 bool hasInsertCoord, bool isYieldPosPure, bool hasRepeatIter = false);
+                 bool hasInsertCoord, bool isYieldPosPure,
+                 bool hasRepeatIter = false, bool hasRepeatAppend = false);
 
   virtual ~ModeFormatImpl();
 
@@ -165,6 +166,8 @@ public:
   virtual ModeFunction repeatIterAccess(ir::Expr pos,
                                        std::vector<ir::Expr> coords,
                                        Mode mode) const;
+  virtual ir::Stmt
+  getAppendRepeat(ir::Expr p, ir::Expr i, ir::Expr r, Mode mode) const;
 
   /// Level functions that implement grouped insert capability.
   /// @{
@@ -205,7 +208,7 @@ public:
   getAppendFinalizeLevel(ir::Expr szPrev, ir::Expr sz, Mode mode) const;
   /// @}
 
-  /// Level functions that implement ungrouped insert capabilitiy.
+  /// Level functions that implement ungrouped insert capability.
   /// @{
   virtual ir::Expr getAssembledSize(ir::Expr prevSize, Mode mode) const;
 
@@ -261,6 +264,7 @@ public:
   const bool hasInsertCoord;
   const bool isYieldPosPure;
   const bool hasRepeatIter;
+  const bool hasRepeatAppend;
 
 protected:
   /// Check if other mode format is identical. Can assume that this method will 
