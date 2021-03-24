@@ -1741,8 +1741,12 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
 
   vector<Iterator> repeatIters = filter(mergers, [](Iterator it){return it.hasRepeatIter();});
   if(repeatIters.size() == mergers.size() && locators.size() == 0){
-    // When we are merging only repeat iterators we can optimize computation
-    return lowerMergeRepeats(pointLattice, coordinate, coordinateVar, statement, reducedAccesses, resolvedCoordDeclared);
+    if(!(generateAssembleCode() && !generateComputeCode())){
+      // When we are merging only repeat iterators we can optimize computation
+      return lowerMergeRepeats(pointLattice, coordinate, coordinateVar, statement, reducedAccesses, resolvedCoordDeclared);
+    } else {
+      return Stmt();
+    }
   }
 
   // Load coordinates from position iterators
@@ -1920,8 +1924,9 @@ Stmt LowererImpl::lowerMergeRepeats(MergeLattice pointLattice,
 
     bodyStmts.push_back(Assign::make(locCountVar, ir::Sub::make(locCountVar, locDistanceVar)));
 
-    bodyStmts.push_back(appender.getAppendRepeat(ir::Sub::make(appender.getPosVar(), 1),
-                                                 repeatIters[0].getCoordVar(), locCountVar));
+    bodyStmts.push_back(appender.getAppendRepeat(appender.getPosVar(), -1,
+                                                 repeatIters[0].getCoordVar(), locCountVar,
+                                                 getCapacityVar(appender.getTensor())));
 
     repBody = Block::make(bodyStmts);
   } else {

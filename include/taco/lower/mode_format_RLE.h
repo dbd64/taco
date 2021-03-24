@@ -13,6 +13,7 @@ namespace taco {
     public:
         RLEModeFormat();
         RLEModeFormat(bool isFull, bool isUnique,
+                      Datatype rle_elem_type = UInt(8),
                       bool includeComments = false,
                       long long allocSize = DEFAULT_ALLOC_SIZE);
 
@@ -34,7 +35,7 @@ namespace taco {
 
         ModeFunction repeatIterBounds(ir::Expr parentPos, Mode mode) const override;
         ModeFunction repeatIterAccess(ir::Expr pos, std::vector<ir::Expr> coords, Mode mode) const override;
-        ir::Stmt getAppendRepeat(ir::Expr p, ir::Expr i, ir::Expr r, Mode mode) const override;
+        ir::Stmt getAppendRepeat(ir::Expr p, ir::Expr o, ir::Expr i, ir::Expr r, ir::Expr valsCapacity, Mode mode) const override;
 
         ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;
 
@@ -73,8 +74,12 @@ namespace taco {
 
         bool equals(const ModeFormatImpl& other) const override;
 
+        ir::Stmt storeIntoRle(ir::Expr pos, ir::Expr offset, ir::Expr repeat, ir::Expr valsCapacity, Mode mode) const;
+        ir::Stmt incrementRle(ir::Expr posVar, ir::Expr offset, ir::Expr valsCapacity, Mode mode) const;
+
         const long long allocSize;
 
+        Datatype rle_elem_type;
     };
 
 }

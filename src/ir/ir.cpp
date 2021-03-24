@@ -831,7 +831,7 @@ Stmt Print::make(std::string fmt, std::vector<Expr> params) {
 }
   
 Expr GetProperty::make(Expr tensor, TensorProperty property, int mode,
-                       int index, std::string name) {
+                       int index, std::string name, Datatype as_type) {
   GetProperty* gp = new GetProperty;
   gp->tensor = tensor;
   gp->property = property;
@@ -843,7 +843,7 @@ Expr GetProperty::make(Expr tensor, TensorProperty property, int mode,
   if (property == TensorProperty::Values)
     gp->type = tensor.type();
   else
-    gp->type = Int();
+    gp->type = as_type;
   
   return gp;
 }

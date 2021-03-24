@@ -314,9 +314,9 @@ ModeFunction Iterator::repeatAccess(const ir::Expr& pos,
   return getMode().getModeFormat().impl->repeatIterAccess(pos, coords, getMode());
 }
 
-ir::Stmt Iterator::getAppendRepeat(const ir::Expr& p, const ir::Expr& i, const ir::Expr& r) const {
+ir::Stmt Iterator::getAppendRepeat(const ir::Expr& p, const ir::Expr& o, const ir::Expr& i, const ir::Expr& r, const ir::Expr c) const {
   taco_iassert(defined() && content->mode.defined());
-  return content->mode.getModeFormat().impl->getAppendRepeat(p, i, r, content->mode);
+  return content->mode.getModeFormat().impl->getAppendRepeat(p, o, i, r, c, content->mode);
 }
 
 

@@ -10,7 +10,7 @@
 //  - Implement Append functionality
 //  - Add support for merging
 
-#include "../../include/taco/lower/mode_format_RLE.h"
+#include "taco/lower/mode_format_RLE.h"
 
 #include "ir/ir_generators.h"
 #include "taco/ir/simplify.h"
@@ -26,11 +26,12 @@ namespace taco {
         RLEModeFormat(true, true) {
     }
 
-    RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, bool includeComments, long long allocSize) :
+    RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, Datatype rle_elem_type, bool includeComments, long long allocSize) :
             ModeFormatImpl("rle", isFull, true, isUnique, false, true, false,
                            true, false, false, false, true,
                            false, false, false, true, true),
-            includeComments(includeComments), allocSize(allocSize) {
+            includeComments(includeComments), allocSize(allocSize), rle_elem_type(rle_elem_type) {
+      taco_uassert(rle_elem_type.isUInt());
     }
 
     ModeFormat RLEModeFormat::copy(
@@ -56,7 +57,7 @@ namespace taco {
             }
         }
         const auto rleVariant =
-                std::make_shared<RLEModeFormat>(isFull, isUnique);
+                std::make_shared<RLEModeFormat>(isFull, isUnique, rle_elem_type, includeComments);
         return ModeFormat(rleVariant);
     }
 
@@ -66,7 +67,8 @@ namespace taco {
         return {GetProperty::make(tensor, TensorProperty::Indices,
                                   level - 1, 0, arraysName + "_pos"),
                 GetProperty::make(tensor, TensorProperty::Indices,
-                                  level - 1, 1, arraysName + "_rle")};
+                                  level - 1, 1, arraysName + "_rle",
+                                  rle_elem_type)};
     }
 
     Expr RLEModeFormat::getPosArray(ModePack pack) const {
@@ -74,7 +76,7 @@ namespace taco {
     }
 
     Expr RLEModeFormat::getRleArray(ModePack pack) const {
-        return pack.getArray(1);
+      return pack.getArray(1);
     }
 
     Expr RLEModeFormat::getValsArray(Mode mode) const {
@@ -152,7 +154,7 @@ namespace taco {
         const std::string curLength = mode.getName() + "_cur_run_length";
 
         if (!mode.hasVar(curLength)) {
-            Expr var = Var::make(curLength, Int());
+            Expr var = Var::make(curLength, rle_elem_type);
             mode.addVar(curLength, var);
             return var;
         }
@@ -221,41 +223,35 @@ namespace taco {
     ir::Stmt RLEModeFormat::getAppendCoord(ir::Expr pos, ir::Expr coord, Mode mode) const {
       taco_iassert(mode.getPackLocation() == 0);
 
-      Stmt c0 = includeComments ? Comment::make("--Call to RLEModeFormat::getAppendCoord!   --") : Stmt();
-      Stmt c1 = includeComments ? Comment::make("--End call to RLEModeFormat::getAppendCoord--") : Stmt();
-
+//      Stmt c0 = includeComments ? Comment::make("--Call to RLEModeFormat::getAppendCoord!   --") : Stmt();
+//      Stmt c1 = includeComments ? Comment::make("--End call to RLEModeFormat::getAppendCoord--") : Stmt();
+//
       // if (coord>0 && vals[pos*stride] == vals[(pos-1)*stride]) { rle[(pos-1)*stride]++; pos--; } else { rle[pos] = 1; }
       // TODO: if used for an outer dimension, this check is wrong + insufficient (it only checks one value back instead of all of them)
 
-      Expr valsArray = getValsArray(mode);
-      Expr rleArray = getRleArray(mode.getModePack());
-      Expr stride = (int)mode.getModePack().getNumModes();
+//      Expr valsArray = getValsArray(mode);
+//      Expr rleArray = getRleArray(mode.getModePack());
+//      Expr stride = (int)mode.getModePack().getNumModes();
+//
+//      Expr posMul = ir::Mul::make(pos, stride);
+//      Expr prevPosMul = ir::Mul::make(ir::Sub::make(pos,1), stride);
+//      Expr coordGtZero = Gt::make(coord, 0);
+//      Expr valsEq = Eq::make(Load::make(valsArray, posMul), Load::make(valsArray,prevPosMul));
+//      Expr ifCond = And::make(coordGtZero, valsEq);
+//
+//      Stmt thenBlock = Block::make(
+//              incrementRle(pos, -1, mode),
+//              Assign::make(pos, ir::Sub::make(pos, 1))
+//              );
 
-      Expr posMul = ir::Mul::make(pos, stride);
-      Expr prevPosMul = ir::Mul::make(ir::Sub::make(pos,1), stride);
-      Expr coordGtZero = Gt::make(coord, 0);
-      Expr valsEq = Eq::make(Load::make(valsArray, posMul), Load::make(valsArray,prevPosMul));
-      Expr ifCond = And::make(coordGtZero, valsEq);
-
-      Stmt thenBlock = Block::make(
-              Store::make(rleArray, prevPosMul, ir::Add::make(1,Load::make(rleArray, prevPosMul))),
-              Assign::make(pos, ir::Sub::make(pos, 1))
-              );
-
-      Stmt storeIdx = Store::make(rleArray, ir::Mul::make(pos, stride), 1); // Right now every new value has a run length of 1
-
-      if (mode.getModePack().getNumModes() > 1) {
-        return IfThenElse::make(ifCond, thenBlock, storeIdx);
-//        return Block::make({c0, IfThenElse::make(ifCond,thenBlock,storeIdx), c1})
-      }
-
-      Stmt maybeResizeIdx = doubleSizeIfFull(rleArray, getRleCapacity(mode), pos);
-      Stmt otherwiseBlock = Block::make(maybeResizeIdx, storeIdx);
-
-      return Block::make({c0, IfThenElse::make(ifCond,thenBlock,otherwiseBlock), c1});
+      Stmt storeIdx = storeIntoRle(pos, 0, 1, Expr(), mode);
+//      if(false) {
+//        return IfThenElse::make(ifCond, thenBlock, storeIdx);
+//      } else
+        return storeIdx;
     }
 
-    ir::Stmt RLEModeFormat::getAppendRepeat(ir::Expr pos, ir::Expr coord, ir::Expr repeat, Mode mode) const {
+    ir::Stmt RLEModeFormat::getAppendRepeat(ir::Expr pos, ir::Expr off, ir::Expr coord, ir::Expr repeat, ir::Expr valsCapacity, Mode mode) const {
       taco_iassert(mode.getPackLocation() == 0);
 
       Expr rleArray = getRleArray(mode.getModePack());
@@ -263,15 +259,8 @@ namespace taco {
 
       Expr rle_pos = ir::Mul::make(pos, stride);
       Expr repeat_sum = ir::Add::make(repeat, ir::Load::make(rleArray, rle_pos));
-
-      Stmt storeIdx = Store::make(rleArray, rle_pos, repeat_sum);
-
-      if (mode.getModePack().getNumModes() > 1) {
-        return storeIdx;
-      }
-
-      Stmt maybeResizeIdx = doubleSizeIfFull(rleArray, getRleCapacity(mode), pos);
-      return Block::make({maybeResizeIdx, storeIdx});
+      Stmt storeIdx = storeIntoRle(pos, off, repeat_sum, valsCapacity, mode);
+      return storeIdx;
     }
 
 
@@ -387,6 +376,110 @@ namespace taco {
       Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendFinalizeLevel --") : Stmt();
 
       return Block::make({c0, initCs, finalizeLoop, c1});
+    }
+
+    int powi(const int x, const unsigned int p)
+    {
+      if (p == 0) return 1;
+      if (p == 1) return x;
+
+      int tmp = powi(x, p/2);
+      if ((p % 2) == 0) { return tmp * tmp; }
+      else { return x * tmp * tmp; }
+    }
+
+    Stmt RLEModeFormat::storeIntoRle(ir::Expr posVar, ir::Expr off, ir::Expr repeat, ir::Expr valsCapacity, Mode mode) const {
+      Expr rleArray = getRleArray(mode.getModePack());
+      Expr valsArray = getValsArray(mode);
+      Expr stride = (int)mode.getModePack().getNumModes();
+      Expr rle_pos = ir::Mul::make(posVar, stride);
+
+      auto f = [&](Expr val){ return Store::make(rleArray, rle_pos, val); };
+
+      int maxRle = powi(2, rle_elem_type.getNumBits())- 1;
+      std::cout << "MAXRLE: " << maxRle << std::endl;
+      std::cout << "rle_elem_type: " << rle_elem_type << std::endl;
+      if(const ir::Literal* lit = repeat.as<ir::Literal>()){
+        taco_iassert(lit->type.isIntegral());
+
+        if(lit->getIntValue() == 1){
+          return f(1);
+        }
+
+        int64_t repeatLit = lit->getIntValue();
+        int64_t loopNum = repeatLit / maxRle;
+        int64_t left_over = repeatLit % maxRle;
+        int64_t loop_start = 0;
+
+        vector<Stmt> stmts;
+        if(loopNum >0) {
+          stmts.push_back(doubleSizeIfFull(valsArray, valsCapacity, ir::Add::make(posVar, loopNum)));
+        }
+        if (left_over == 0) {
+          loop_start = 1;
+          stmts.push_back(f(maxRle));
+        }
+        for(int64_t i=loop_start; i < loopNum; i++){
+          stmts.push_back(f(maxRle));
+          stmts.push_back(Store::make(valsArray, ir::Add::make(rle_pos, i+1), Load::make(valsArray, rle_pos)));
+        }
+        if(left_over > 0){
+          stmts.push_back(f(left_over));
+        }
+        stmts.push_back(Assign::make(posVar, ir::Add::make(posVar,loopNum)));
+        return Block::make(stmts);
+      } else {
+        // We need to generate the insertion loop from above
+        Expr loopVar = Var::make(mode.getName() + "_rle_store", Int());
+        Expr loopBound = Var::make(mode.getName() + "_rle_store_bound", Int());
+        Expr rleLeftOver = Var::make(mode.getName() + "_rle_left_over", Int());
+        Expr loopStart = Var::make(mode.getName() + "_rle_loop_start", Int());
+        Expr repeatVar = Var::make(mode.getName() + "_rle_value", Int());
+
+        vector<Stmt> stmts;
+        stmts.push_back(VarDecl::make(repeatVar, repeat));
+        stmts.push_back(VarDecl::make(rleLeftOver, ir::Rem::make(repeatVar, maxRle)));
+        stmts.push_back(VarDecl::make(loopBound, ir::Div::make(repeatVar, maxRle)));
+        stmts.push_back(VarDecl::make(loopStart, 0));
+
+        stmts.push_back(doubleSizeIfFull(valsArray, valsCapacity, ir::Add::make(posVar,loopBound)));
+        stmts.push_back(IfThenElse::make(Eq::make(rleLeftOver, 0),
+                                         Block::make(Assign::make(loopStart, 1),
+                                                     f(maxRle))));
+        stmts.push_back(For::make(loopVar, loopStart, loopBound, 1,
+                                  Block::make(f(maxRle),
+                                              Store::make(valsArray, ir::Add::make(rle_pos, ir::Add::make(loopVar,1)), Load::make(valsArray, rle_pos)))));
+        stmts.push_back(IfThenElse::make(Gt::make(rleLeftOver, 0),
+                                         f(maxRle)));
+        stmts.push_back(Assign::make(posVar, ir::Add::make(posVar,loopBound)));
+        auto ret = Block::make(stmts);
+        std::cout << ret << std::endl;
+        return ret;
+      }
+    }
+
+    Stmt RLEModeFormat::incrementRle(ir::Expr posVar, ir::Expr offset, ir::Expr valsCapacity, Mode mode) const {
+      int maxRle = powi(2, rle_elem_type.getNumBytes())- 1;
+      Expr rleArray = getRleArray(mode.getModePack());
+      Expr stride = (int)mode.getModePack().getNumModes();
+      Expr pos = ir::Add::make(posVar, offset);
+      Expr rle_pos = ir::Mul::make(pos, stride);
+      Expr rle_pos_1 = ir::Mul::make(ir::Add::make(pos,1), stride);
+      Expr valsArray = getValsArray(mode);
+
+      Expr rle_val = Load::make(rleArray, rle_pos);
+
+      Stmt eqBlock = Block::make(
+              doubleSizeIfFull(rleArray, getRleCapacity(mode), rle_pos_1),
+              doubleSizeIfFull(valsArray, valsCapacity, rle_pos_1),
+              Store::make(rleArray, rle_pos_1, 1),
+              Store::make(valsArray, rle_pos_1, Load::make(valsArray, rle_pos)),
+              Assign::make(posVar, ir::Add::make(posVar,1)));
+
+      return IfThenElse::make(Eq::make(rle_val, maxRle),
+                              eqBlock,
+                              Store::make(rleArray, rle_pos, ir::Add::make(1,rle_val))
+                       );
     }
 
 

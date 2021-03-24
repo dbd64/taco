@@ -167,7 +167,7 @@ public:
                                        std::vector<ir::Expr> coords,
                                        Mode mode) const;
   virtual ir::Stmt
-  getAppendRepeat(ir::Expr p, ir::Expr i, ir::Expr r, Mode mode) const;
+  getAppendRepeat(ir::Expr p, ir::Expr o, ir::Expr i, ir::Expr r, ir::Expr valsCapacity, Mode mode) const;
 
   /// Level functions that implement grouped insert capability.
   /// @{

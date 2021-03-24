@@ -791,7 +791,7 @@ struct GetProperty : public ExprNode<GetProperty> {
 
   static Expr make(Expr tensor, TensorProperty property, int mode=0);
   static Expr make(Expr tensor, TensorProperty property, int mode,
-                   int index, std::string name);
+                   int index, std::string name, Datatype as_type = Int());
   
   static const IRNodeType _type_info = IRNodeType::GetProperty;
 };

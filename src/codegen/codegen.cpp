@@ -257,10 +257,10 @@ string CodeGen::unpackTensorProperty(string varname, const GetProperty* op,
         << "->dimensions[" << op->mode << "]);\n";
   } else {
     taco_iassert(op->property == TensorProperty::Indices);
-    tp = "int*";
+    tp = printType(op->type, true); //"int*";
     auto nm = op->index;
     ret << tp << " " << restrictKeyword() << " " << varname << " = ";
-    ret << "(int*)(" << tensor->name << "->indices[" << op->mode;
+    ret << "(" << tp << ")(" << tensor->name << "->indices[" << op->mode;
     ret << "][" << nm << "]);\n";
   }
 

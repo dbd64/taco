@@ -147,7 +147,7 @@ public:
   /// Returns code for repeat iter
   ModeFunction repeatBounds(const ir::Expr &parentPos) const;
   ModeFunction repeatAccess(const ir::Expr &pos, const std::vector<ir::Expr> &coords) const;
-  ir::Stmt getAppendRepeat(const ir::Expr& p, const ir::Expr& r, const ir::Expr& i) const;
+  ir::Stmt getAppendRepeat(const ir::Expr& p, const ir::Expr& o, const ir::Expr& r, const ir::Expr& i, const ir::Expr c) const;
 
 
     /// Returns code for level function that implements locate capability.

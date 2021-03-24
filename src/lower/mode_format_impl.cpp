@@ -213,7 +213,7 @@ ModeFunction ModeFormatImpl::repeatIterAccess(ir::Expr pos,
 }
 
 Stmt
-ModeFormatImpl::getAppendRepeat(ir::Expr p, ir::Expr i, ir::Expr r, Mode mode) const {
+ModeFormatImpl::getAppendRepeat(ir::Expr p, ir::Expr o, ir::Expr i, ir::Expr r, ir::Expr valsCapacity, Mode mode) const {
   return Stmt();
 }
 
