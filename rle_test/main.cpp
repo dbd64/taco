@@ -115,7 +115,11 @@ static void BM_all(benchmark::State &state) {
     auto [r0, d0] = res[2 * j];
     auto [r1, d1] = res[2 * j + 1];
     Tensor<double> expected("expected_", {tsize}, isDense? dv : rv);
-    expected(i) = d0(i) + d1(i);
+    if(isDense) {
+      expected(i) = d0(i) + d1(i);
+    } else {
+      expected(i) = r0(i) + r1(i);
+    }
     expected.compile();
     expected.assemble();
     es.push_back(expected);
