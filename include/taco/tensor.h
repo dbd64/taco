@@ -422,7 +422,11 @@ public:
   /// Compute the given expression and put the values in the tensor storage.
   void compute();
 
-  /// Compile, assemble and compute as needed.
+  /// Compute the given expression, put the values in the tensor storage,
+  /// and then set the needs compute flag. This is for benchmarking
+  void computeAndClear();
+
+    /// Compile, assemble and compute as needed.
   void evaluate();
 
   /// True if the Tensor needs to be packed.

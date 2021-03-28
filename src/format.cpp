@@ -405,6 +405,10 @@ const Format CSC({Dense, Sparse}, {1,0});
 const Format DCSR({Sparse, Sparse}, {0,1});
 const Format DCSC({Sparse, Sparse}, {1,0});
 
+const ModeFormat RLE_s(int bits){
+   return ModeFormat(std::make_shared<RLEModeFormat>(true, true, UInt(bits)));
+}
+
 const Format COO(int order, bool isUnique, bool isOrdered, bool isAoS, 
                  const std::vector<int>& modeOrdering) {
   taco_uassert(order > 0);

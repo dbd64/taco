@@ -832,6 +832,12 @@ void TensorBase::compute() {
   }
 }
 
+void TensorBase::computeAndClear() {
+  compute();
+  setNeedsCompute(true);
+}
+
+
 void TensorBase::evaluate() {
   this->compile();
   if (!getAssignment().getOperator().defined()) {

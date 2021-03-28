@@ -397,8 +397,6 @@ namespace taco {
       auto f = [&](Expr val){ return Store::make(rleArray, rle_pos, val); };
 
       int maxRle = powi(2, rle_elem_type.getNumBits())- 1;
-      std::cout << "MAXRLE: " << maxRle << std::endl;
-      std::cout << "rle_elem_type: " << rle_elem_type << std::endl;
       if(const ir::Literal* lit = repeat.as<ir::Literal>()){
         taco_iassert(lit->type.isIntegral());
 
@@ -434,26 +432,24 @@ namespace taco {
         Expr loopBound = Var::make(mode.getName() + "_rle_store_bound", Int());
         Expr rleLeftOver = Var::make(mode.getName() + "_rle_left_over", Int());
         Expr loopStart = Var::make(mode.getName() + "_rle_loop_start", Int());
-        Expr repeatVar = Var::make(mode.getName() + "_rle_value", Int());
 
         vector<Stmt> stmts;
-        stmts.push_back(VarDecl::make(repeatVar, repeat));
-        stmts.push_back(VarDecl::make(rleLeftOver, ir::Rem::make(repeatVar, maxRle)));
-        stmts.push_back(VarDecl::make(loopBound, ir::Div::make(repeatVar, maxRle)));
+        stmts.push_back(VarDecl::make(loopBound, ir::Div::make(repeat, maxRle)));
         stmts.push_back(VarDecl::make(loopStart, 0));
+        Expr remExpr = ir::Rem::make(repeat, maxRle);
+
 
         stmts.push_back(doubleSizeIfFull(valsArray, valsCapacity, ir::Add::make(posVar,loopBound)));
-        stmts.push_back(IfThenElse::make(Eq::make(rleLeftOver, 0),
+        stmts.push_back(IfThenElse::make(Eq::make(remExpr, 0),
                                          Block::make(Assign::make(loopStart, 1),
                                                      f(maxRle))));
         stmts.push_back(For::make(loopVar, loopStart, loopBound, 1,
                                   Block::make(f(maxRle),
                                               Store::make(valsArray, ir::Add::make(rle_pos, ir::Add::make(loopVar,1)), Load::make(valsArray, rle_pos)))));
-        stmts.push_back(IfThenElse::make(Gt::make(rleLeftOver, 0),
-                                         f(maxRle)));
+        stmts.push_back(IfThenElse::make(Gt::make(remExpr, 0),
+                                         f(remExpr)));
         stmts.push_back(Assign::make(posVar, ir::Add::make(posVar,loopBound)));
         auto ret = Block::make(stmts);
-        std::cout << ret << std::endl;
         return ret;
       }
     }

@@ -336,10 +336,11 @@ struct ExpressionSimplifier : IRRewriter {
     if(isa<Literal>(b)){
       auto literal = to<Literal>(b);
       if(literal->equalsScalar(1)){
-        expr = 0;
+        expr = Literal::make(0);
         return;
       }
     }
+    expr = op;
   }
 
   void visit(const Lcm* op){

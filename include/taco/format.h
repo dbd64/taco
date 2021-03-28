@@ -200,6 +200,8 @@ extern const ModeFormat sparse;
 extern const ModeFormat singleton;
 extern const ModeFormat rle;
 
+const ModeFormat RLE_s(int bits);
+
 extern const Format CSR;
 extern const Format CSC;
 extern const Format DCSR;

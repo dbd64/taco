@@ -13,7 +13,7 @@ namespace taco {
     public:
         RLEModeFormat();
         RLEModeFormat(bool isFull, bool isUnique,
-                      Datatype rle_elem_type = UInt(8),
+                      Datatype rle_elem_type = UInt(16),
                       bool includeComments = false,
                       long long allocSize = DEFAULT_ALLOC_SIZE);
 
