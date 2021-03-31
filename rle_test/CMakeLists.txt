@@ -40,7 +40,7 @@ else()
 endif()
 
 
-add_executable(manual manual.cpp temp_vec.c)
+add_executable(manual manual.cpp temp_vec.c temp_vec_dense.c)
 # To let the app be a standalone project
 if(NOT TACO_INCLUDE_DIR)
   if(NOT DEFINED ENV{TACO_INCLUDE_DIR} OR NOT DEFINED ENV{TACO_LIBRARY_DIR})

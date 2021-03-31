@@ -8,5 +8,6 @@
 #include "taco/taco_tensor_t.h"
 
 int compute(taco_tensor_t *t, taco_tensor_t *f, taco_tensor_t *s);
+void deinit_taco_tensor_t(taco_tensor_t* t);
 
 #endif //TACO_TEMP_VEC_H

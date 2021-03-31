@@ -541,6 +541,9 @@ void IRPrinter::visit(const Allocate* op) {
     stream << "reallocate ";
   else
     stream << "allocate ";
+
+  stream << keywordString(util::toString(op->var.type())) << " ";
+
   op->var.accept(this);
   stream << "[";
   op->num_elements.accept(this);

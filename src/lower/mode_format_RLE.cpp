@@ -257,7 +257,7 @@ namespace taco {
       Expr rleArray = getRleArray(mode.getModePack());
       Expr stride = (int)mode.getModePack().getNumModes();
 
-      Expr rle_pos = ir::Mul::make(pos, stride);
+      Expr rle_pos = ir::Mul::make(ir::Add::make(pos,off), stride);
       Expr repeat_sum = ir::Add::make(repeat, ir::Load::make(rleArray, rle_pos));
       Stmt storeIdx = storeIntoRle(pos, off, repeat_sum, valsCapacity, mode);
       return storeIdx;
@@ -349,6 +349,10 @@ namespace taco {
         Expr rleArray = getRleArray(mode.getModePack());
         initStmts.push_back(VarDecl::make(rleCapacity, defaultCapacity));
         initStmts.push_back(Allocate::make(rleArray, rleCapacity));
+//        auto forVar = Var::make("fill_i", Int32);
+//        auto forLoop = For::make(forVar, 0, rleCapacity, 1,
+//                                 Block::make(Store::make(rleArray, forVar, 1, false, ParallelUnit::DefaultUnit)));
+//        initStmts.push_back(forLoop);
       }
 
       initStmts.push_back(c1);
@@ -372,6 +376,38 @@ namespace taco {
       Stmt body = Block::make({incCs, updatePos});
       Stmt finalizeLoop = For::make(pVar, 1, ir::Add::make(parentSize, 1), 1, body);
 
+      // Do compression
+//      vector<Stmt> stmts;
+//      Expr tnpos = Var::make("tnpos", Int32);
+//      Expr tnval = Var::make("tnval", mode.getTensorExpr().type());
+//      Expr vals = getValsArray(mode);
+//
+//      stmts.push_back(VarDecl::make(tnpos, 0));
+//      stmts.push_back(VarDecl::make(tnval, Load::make(vals, tnpos)));
+//
+//      Expr itpos = Var::make("itpos", Int32);
+//
+//      For::make(itpos, 1, Load::make)
+//      int32_t tnpos = 0;
+//      double tnval = t_vals[0];
+//
+//      for (int32_t itpos = 1; itpos < t_pos[1]; itpos++){
+//        double val = t->vals[itpos];
+//        if (val == tnval){
+//          t_rle[tnpos]++; // HACK: This assumes that this will never overflow (which should be fine for this manual test)
+//        } else {
+//          tnpos++;
+//          tnval = t_vals[tnpos];
+//        }
+//      }
+//
+//      void* res = realloc(t->vals, sizeof(double) * (tnpos+1));
+//      if(!res){
+//        taco_uerror;
+//      }
+//      t->vals = (uint8_t*)res;
+
+
       Stmt c0 = includeComments ? Comment::make("-- Call to RLEModeFormat::getAppendFinalizeLevel!    --") : Stmt();
       Stmt c1 = includeComments ? Comment::make("-- End call to RLEModeFormat::getAppendFinalizeLevel --") : Stmt();
 
@@ -392,39 +428,52 @@ namespace taco {
       Expr rleArray = getRleArray(mode.getModePack());
       Expr valsArray = getValsArray(mode);
       Expr stride = (int)mode.getModePack().getNumModes();
-      Expr rle_pos = ir::Mul::make(posVar, stride);
+      Expr rle_pos = ir::Mul::make(ir::Add::make(posVar,off), stride);
 
-      auto f = [&](Expr val){ return Store::make(rleArray, rle_pos, val); };
+      auto p = [&](Expr off2 = 0){
+          return ir::Mul::make(ir::Add::make(posVar,off2), stride);
+      };
+
+      auto f = [&](Expr val, Expr off2 = 0){
+        return Store::make(rleArray, p(ir::Add::make(off, off2)), val);
+      };
 
       int maxRle = powi(2, rle_elem_type.getNumBits())- 1;
       if(const ir::Literal* lit = repeat.as<ir::Literal>()){
         taco_iassert(lit->type.isIntegral());
 
         if(lit->getIntValue() == 1){
-          return f(1);
+          Block::make(doubleSizeIfFull(rleArray, getRleCapacity(mode), p(off)),
+                             f(1));
         }
 
         int64_t repeatLit = lit->getIntValue();
         int64_t loopNum = repeatLit / maxRle;
         int64_t left_over = repeatLit % maxRle;
-        int64_t loop_start = 0;
 
         vector<Stmt> stmts;
-        if(loopNum >0) {
+        if(repeatLit < maxRle){
+          stmts.push_back(doubleSizeIfFull(rleArray, getRleCapacity(mode), p(off)));
+          stmts.push_back(f(maxRle, 0));
+        } else {
+          taco_iassert(loopNum > 0); // repeatLit is greater than the current RLE slot, so we can assume the loop
+                                        // runs more than once.
           stmts.push_back(doubleSizeIfFull(valsArray, valsCapacity, ir::Add::make(posVar, loopNum)));
+          stmts.push_back(doubleSizeIfFull(rleArray, getRleCapacity(mode), ir::Add::make(posVar, loopNum)));
+          if (left_over == 0) {
+            loopNum -= 1;
+            stmts.push_back(f(maxRle, 0));
+          } else{
+            stmts.push_back(f(left_over, 0));
+          }
+
+          for(int64_t i=0; i < loopNum; i++){
+            stmts.push_back(f(maxRle,i+1));
+            stmts.push_back(Store::make(valsArray, ir::Add::make(rle_pos, i+1), Load::make(valsArray, rle_pos)));
+          }
+
+          stmts.push_back(Assign::make(posVar, ir::Add::make(posVar,loopNum)));
         }
-        if (left_over == 0) {
-          loop_start = 1;
-          stmts.push_back(f(maxRle));
-        }
-        for(int64_t i=loop_start; i < loopNum; i++){
-          stmts.push_back(f(maxRle));
-          stmts.push_back(Store::make(valsArray, ir::Add::make(rle_pos, i+1), Load::make(valsArray, rle_pos)));
-        }
-        if(left_over > 0){
-          stmts.push_back(f(left_over));
-        }
-        stmts.push_back(Assign::make(posVar, ir::Add::make(posVar,loopNum)));
         return Block::make(stmts);
       } else {
         // We need to generate the insertion loop from above
@@ -432,22 +481,27 @@ namespace taco {
         Expr loopBound = Var::make(mode.getName() + "_rle_store_bound", Int());
         Expr rleLeftOver = Var::make(mode.getName() + "_rle_left_over", Int());
         Expr loopStart = Var::make(mode.getName() + "_rle_loop_start", Int());
+        Expr repeatVar = Var::make(mode.getName() + "_rle_repeat", Int());
+
 
         vector<Stmt> stmts;
-        stmts.push_back(VarDecl::make(loopBound, ir::Div::make(repeat, maxRle)));
+        stmts.push_back(VarDecl::make(repeatVar, repeat));
+        stmts.push_back(VarDecl::make(loopBound, ir::Div::make(repeatVar, maxRle)));
+        Expr remExpr = ir::Rem::make(repeatVar, maxRle);
+        stmts.push_back(VarDecl::make(rleLeftOver, remExpr));
         stmts.push_back(VarDecl::make(loopStart, 0));
-        Expr remExpr = ir::Rem::make(repeat, maxRle);
 
-
+        stmts.push_back(doubleSizeIfFull(rleArray, getRleCapacity(mode), ir::Add::make(posVar,loopBound)));
         stmts.push_back(doubleSizeIfFull(valsArray, valsCapacity, ir::Add::make(posVar,loopBound)));
-        stmts.push_back(IfThenElse::make(Eq::make(remExpr, 0),
+        stmts.push_back(IfThenElse::make(Eq::make(rleLeftOver, 0),
                                          Block::make(Assign::make(loopStart, 1),
                                                      f(maxRle))));
         stmts.push_back(For::make(loopVar, loopStart, loopBound, 1,
-                                  Block::make(f(maxRle),
-                                              Store::make(valsArray, ir::Add::make(rle_pos, ir::Add::make(loopVar,1)), Load::make(valsArray, rle_pos)))));
+                                  Block::make(f(maxRle, ir::Add::make(loopVar,1)),
+                                              Store::make(valsArray, p(ir::Add::make(ir::Add::make(off, loopVar),1)), Load::make(valsArray, rle_pos)))));
         stmts.push_back(IfThenElse::make(Gt::make(remExpr, 0),
                                          f(remExpr)));
+
         stmts.push_back(Assign::make(posVar, ir::Add::make(posVar,loopBound)));
         auto ret = Block::make(stmts);
         return ret;
