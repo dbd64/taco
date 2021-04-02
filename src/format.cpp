@@ -155,6 +155,10 @@ std::string ModeFormat::getName() const {
   return defined() ? impl->name : "undefined";
 }
 
+Datatype ModeFormat::getIndexArrayType(int i) const {
+  return defined() ? impl->IndexArrayType(i) : (taco_ierror, Int());
+}
+
 bool ModeFormat::hasProperties(const std::vector<Property>& properties) const {
   for (auto& property : properties) {
     switch (property) {

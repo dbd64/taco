@@ -168,7 +168,12 @@ std::vector<AttrQuery> ModeFormatImpl::attrQueries(
     vector<IndexVar> parentCoords, vector<IndexVar> childCoords) const {
   return std::vector<AttrQuery>();
 }
-                                                  
+
+
+Datatype ModeFormatImpl::IndexArrayType(int i) const {
+  return Int();
+}
+
 
 ModeFunction ModeFormatImpl::coordIterBounds(vector<Expr> coords,
                                            Mode mode) const {

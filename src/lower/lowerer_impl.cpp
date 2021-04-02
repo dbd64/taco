@@ -1284,31 +1284,31 @@ Stmt LowererImpl::lowerForallRepeat(Forall forall, Iterator iterator,
     Expr count         = repeatAccess[2];
     taco_iassert(repeatAccess[3].as<ir::Literal>() && repeatAccess[3].as<ir::Literal>()->getBoolValue());
 
-    Expr posOff = getPosOffVar(iterator.getMode());
-    Stmt posOffDecl = VarDecl::make(posOff, 0);
-
     Expr posSave = getPosSaveVar(iterator.getMode());
     Stmt posSaveDecl = VarDecl::make(posSave, position);
 
-    Stmt posOffUpdate = Assign::make(posOff, Rem::make(ir::Add::make(posOff, 1), length));
-    Stmt calcPos = Assign::make(position, ir::Add::make(posSave, posOff));
+    vector<Stmt> inner;
+    if(auto len = length.as<ir::Literal>(); len==nullptr || !len->equalsScalar(1)){
+      Expr posOff = getPosOffVar(iterator.getMode());
+      inner.push_back(VarDecl::make(posOff, Rem::make(ir::Add::make(posOff, 1), length)));
+      inner.push_back(Assign::make(position, ir::Add::make(posSave, posOff)));
+    }
 
     // This is the innermost statement implementing the operation on tensor elements
-    Stmt body = lowerForallBody(coordinate, forall.getStmt(),
-                                locators, inserters, appenders, reducedAccesses);
-    body = Block::make(recoveryStmt, body);
+    inner.push_back(recoveryStmt);
+    inner.push_back(lowerForallBody(coordinate, forall.getStmt(),
+                                locators, inserters, appenders, reducedAccesses));
 
     // Code to append positions
-    Stmt posAppend = generateAppendPositions(appenders);
-
-    Stmt coordIncr = Assign::make(coordinate, ir::Add::make(coordinate,1));
+    inner.push_back(generateAppendPositions(appenders));
+    inner.push_back(Assign::make(coordinate, ir::Add::make(coordinate,1)));
 
     Stmt posRestore = Assign::make(position, posSave);
 
     Stmt innerLoop = Block::make(
-            posOffDecl, posSaveDecl,
+            posSaveDecl,
           For::make(getRepeatIterVar(iterator.getMode()), 0, count, 1,
-                      Block::make(posOffUpdate, calcPos, body, posAppend, coordIncr)),
+                      Block::make(inner)),
             posRestore
             );
 

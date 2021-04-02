@@ -121,6 +121,8 @@ public:
   /// should return the same name.
   std::string getName() const;
 
+  Datatype getIndexArrayType(int i) const;
+
   /// Returns true if the mode format has the given properties.
   bool hasProperties(const std::vector<Property>& properties) const;
 

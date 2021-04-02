@@ -248,7 +248,7 @@ static int lexicographicalCmp(const void* a, const void* b) {
   return 0;
 }
 
-static size_t unpackTensorData(const taco_tensor_t& tensorData,
+size_t unpackTensorData(const taco_tensor_t& tensorData,
                                const TensorBase& tensor) {
   auto storage = tensor.getStorage();
   auto format = storage.getFormat();
@@ -273,7 +273,19 @@ static size_t unpackTensorData(const taco_tensor_t& tensorData,
     } else if (modeType.getName() == RLE.getName()) {
       auto valsSize = ((int*)tensorData.indices[i][0])[numVals];
       Array pos = Array(type<int>(), tensorData.indices[i][0], numVals+1, Array::UserOwns);
-      Array rle = Array(type<int>(), tensorData.indices[i][1], valsSize, Array::UserOwns);
+      Array rle;
+      Datatype t = modeType.getIndexArrayType(1);
+      if (t == UInt8) {
+        rle = Array(type<uint8_t>(), tensorData.indices[i][1], valsSize, Array::UserOwns);
+      } else if (t == UInt16) {
+        rle = Array(type<uint16_t>(), tensorData.indices[i][1], valsSize, Array::UserOwns);
+      } else if (t == UInt32) {
+        rle = Array(type<uint32_t>(), tensorData.indices[i][1], valsSize, Array::UserOwns);
+      } else if (t == UInt64) {
+        rle = Array(type<uint64_t>(), tensorData.indices[i][1], valsSize, Array::UserOwns);
+      } else {
+        taco_ierror;
+      }
       modeIndices.push_back(ModeIndex({pos, rle}));
       numVals = valsSize;
     } else {
@@ -653,6 +665,7 @@ void TensorBase::compile(taco::IndexStmt stmt, bool assembleWhileCompute) {
 
   content->assembleFunc = lower(stmtToCompile, "assemble", true, false);
   content->computeFunc = lower(stmtToCompile, "compute",  assembleWhileCompute, true);
+
   // If we have to recompile the kernel, we need to create a new Module. Since
   // the module we are holding on to could have been retrieved from the cache,
   // we can't modify it.
@@ -881,6 +894,11 @@ void TensorBase::printComputeIR(ostream& os, bool color, bool simplify) const {
   std::shared_ptr<ir::CodeGen> codegen = ir::CodeGen::init_default(os, ir::CodeGen::ImplementationGen);
   codegen->compile(content->computeFunc.as<Function>(), false);
 }
+
+void TensorBase::printCompute() const {
+  printComputeIR(std::cout);
+}
+
 
 void TensorBase::printAssembleIR(ostream& os, bool color, bool simplify) const {
   IRPrinter printer(os, color, simplify);

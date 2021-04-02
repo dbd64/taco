@@ -456,7 +456,11 @@ public:
   void printComputeIR(std::ostream& stream, bool color=false,
                       bool simplify=false) const;
 
-  /// Print the IR loops that assemble the tensor's expression.
+  /// Print the IR loops that compute the tensor's expression.
+  void printCompute() const;
+
+
+    /// Print the IR loops that assemble the tensor's expression.
   void printAssembleIR(std::ostream& stream, bool color=false,
                        bool simplify=false) const;
 
@@ -689,6 +693,10 @@ struct ScalarAccess {
 // ------------------------------------------------------------
 // Utility functions
 // ------------------------------------------------------------
+
+size_t unpackTensorData(const taco_tensor_t& tensorData,
+                        const TensorBase& tensor);
+
 
 /// The file formats supported by the taco file readers and writers.
 enum class FileType {
@@ -1304,6 +1312,75 @@ void taco_set_num_threads(int num_threads);
 /// Get maximum number of threads to use for parallel execution of tensor 
 /// computations. This will be replaced by a scheduling language in the future.
 int taco_get_num_threads();
+
+template <class T, class R> void compress_rle(Tensor<T> &tt) {
+  taco_tensor_t *t = tt.getStorage();
+
+  uint64_t max_rle = std::numeric_limits<R>::max();
+
+  int32_t *t_pos = (int32_t *)(t->indices[0][0]);
+  R *t_rle = (R *)(t->indices[0][1]);
+  T *t_vals = (T *)(t->vals);
+
+  T *t_vals_new = (T *)malloc(sizeof(T) * t_pos[1]);
+  t_vals_new[0] = t_vals[0];
+
+  int32_t tnpos = 0;
+  T tnval = t_vals[0];
+
+  for (int32_t itpos = 1; itpos < t_pos[1]; itpos++) {
+    double val = t_vals[itpos];
+    if (val == tnval) {
+      if (t_rle[tnpos] == max_rle) {
+        tnpos++;
+        t_vals_new[tnpos] = tnval;
+        t_rle[tnpos] = 1;
+      } else {
+        t_rle[tnpos]++;
+      }
+    } else {
+      tnpos++;
+      tnval = val;
+      t_vals_new[tnpos] = tnval;
+      t_rle[tnpos] = 1;
+    }
+  }
+
+  void *res = realloc(t_vals_new, sizeof(T) * (tnpos + 1));
+  if (!res) {
+    taco_uerror;
+  }
+  t->vals = (uint8_t *)res;
+
+  res = realloc(t_rle, sizeof(R) * (tnpos + 1));
+  if (!res) {
+    taco_uerror;
+  }
+  t->indices[0][1] = (uint8_t *)res;
+
+  t_pos[1] = tnpos + 1;
+
+  tt.content->valuesSize = unpackTensorData(*t, tt);
+}
+
+template <class T> void compress_rle_b(Tensor<T> &tt, int bits) {
+  switch (bits) {
+    case 8:
+      compress_rle<T, uint8_t>(tt);
+      break;
+    case 16:
+      compress_rle<T, uint16_t>(tt);
+      break;
+    case 32:
+      compress_rle<T, uint32_t>(tt);
+      break;
+    case 64:
+      compress_rle<T, uint64_t>(tt);
+      break;
+    default:
+      taco_uerror;
+  }
+}
 
 }
 #endif

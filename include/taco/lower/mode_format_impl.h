@@ -122,6 +122,7 @@ public:
       std::vector<IndexVar> parentCoords, 
       std::vector<IndexVar> childCoords) const;
 
+  virtual Datatype IndexArrayType(int i) const;
 
   /// The coordinate iteration capability's iterator function computes a range
   /// [result[0], result[1]) of coordinates to iterate over.

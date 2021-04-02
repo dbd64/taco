@@ -152,8 +152,11 @@ int compute(taco_tensor_t *t, taco_tensor_t *f, taco_tensor_t *s) {
       t_capacity *= 2;
     }
     t_vals[itpos] = f_vals[ifpos] + s_vals[ispos];
+    if (t1_rle_size <= itpos) {
+      t1_rle = (uint16_t*)realloc(t1_rle, sizeof(uint16_t) * (t1_rle_size * 2));
+      t1_rle_size *= 2;
+    }
     t1_rle[itpos] = 1;
-    itpos = itpos;
     itpos++;
     ifcoord++;
     f1_remaining_count = f1_remaining_count - 1;
@@ -169,10 +172,10 @@ int compute(taco_tensor_t *t, taco_tensor_t *f, taco_tensor_t *s) {
     }
     if (locCount > locDist) {
       locCount = locCount - locDist;
-      int32_t t1_rle_repeat = locCount + t1_rle[(itpos + -1)];
-      int32_t t1_rle_store_bound = t1_rle_repeat / 65535;
-      int32_t t1_rle_left_over = t1_rle_repeat % 65535;
-      int32_t t1_rle_loop_start = 0;
+      uint64_t t1_rle_repeat = locCount + t1_rle[(itpos + -1)];
+      uint64_t t1_rle_store_bound = t1_rle_repeat / 65535;
+      uint64_t t1_rle_left_over = t1_rle_repeat % 65535;
+      uint64_t t1_rle_loop_start = 0;
       if (t1_rle_size <= itpos + t1_rle_store_bound) {
         t1_rle = (uint16_t*)realloc(t1_rle, sizeof(uint16_t) * (t1_rle_size * 2));
         t1_rle_size *= 2;
@@ -185,7 +188,7 @@ int compute(taco_tensor_t *t, taco_tensor_t *f, taco_tensor_t *s) {
         t1_rle_loop_start = 1;
         t1_rle[itpos + -1] = 65535;
       }
-      for (int32_t t1_rle_store = t1_rle_loop_start; t1_rle_store < t1_rle_store_bound; t1_rle_store++) {
+      for (uint64_t t1_rle_store = t1_rle_loop_start; t1_rle_store < t1_rle_store_bound; t1_rle_store++) {
         t1_rle[itpos + (-1 + (t1_rle_store + 1))] = 65535;
         t_vals[itpos + ((-1 + t1_rle_store) + 1)] = t_vals[(itpos + -1)];
       }
@@ -294,8 +297,11 @@ int evaluate(taco_tensor_t *t, taco_tensor_t *f, taco_tensor_t *s) {
       t_capacity *= 2;
     }
     t_vals[itpos] = f_vals[ifpos] + s_vals[ispos];
+    if (t1_rle_size <= itpos) {
+      t1_rle = (uint16_t*)realloc(t1_rle, sizeof(uint16_t) * (t1_rle_size * 2));
+      t1_rle_size *= 2;
+    }
     t1_rle[itpos] = 1;
-    itpos = itpos;
     itpos++;
     ifcoord++;
     f1_remaining_count = f1_remaining_count - 1;
@@ -311,10 +317,10 @@ int evaluate(taco_tensor_t *t, taco_tensor_t *f, taco_tensor_t *s) {
     }
     if (locCount > locDist) {
       locCount = locCount - locDist;
-      int32_t t1_rle_repeat = locCount + t1_rle[(itpos + -1)];
-      int32_t t1_rle_store_bound = t1_rle_repeat / 65535;
-      int32_t t1_rle_left_over = t1_rle_repeat % 65535;
-      int32_t t1_rle_loop_start = 0;
+      uint64_t t1_rle_repeat = locCount + t1_rle[(itpos + -1)];
+      uint64_t t1_rle_store_bound = t1_rle_repeat / 65535;
+      uint64_t t1_rle_left_over = t1_rle_repeat % 65535;
+      uint64_t t1_rle_loop_start = 0;
       if (t1_rle_size <= itpos + t1_rle_store_bound) {
         t1_rle = (uint16_t*)realloc(t1_rle, sizeof(uint16_t) * (t1_rle_size * 2));
         t1_rle_size *= 2;
@@ -327,7 +333,7 @@ int evaluate(taco_tensor_t *t, taco_tensor_t *f, taco_tensor_t *s) {
         t1_rle_loop_start = 1;
         t1_rle[itpos + -1] = 65535;
       }
-      for (int32_t t1_rle_store = t1_rle_loop_start; t1_rle_store < t1_rle_store_bound; t1_rle_store++) {
+      for (uint64_t t1_rle_store = t1_rle_loop_start; t1_rle_store < t1_rle_store_bound; t1_rle_store++) {
         t1_rle[itpos + (-1 + (t1_rle_store + 1))] = 65535;
         t_vals[itpos + ((-1 + t1_rle_store) + 1)] = t_vals[(itpos + -1)];
       }
@@ -407,8 +413,11 @@ int pack_f(taco_tensor_t *f, int* f_COO1_pos, int* f_COO1_crd, double* f_COO_val
       f_capacity *= 2;
     }
     f_vals[ifpos] = f_COO_val;
+    if (f1_rle_size <= ifpos) {
+      f1_rle = (uint16_t*)realloc(f1_rle, sizeof(uint16_t) * (f1_rle_size * 2));
+      f1_rle_size *= 2;
+    }
     f1_rle[ifpos] = 1;
-    ifpos = ifpos;
     ifpos++;
     /* [lowerMergePoint] incIteratorVarStmts */
   }
@@ -458,8 +467,11 @@ int pack_s(taco_tensor_t *s, int* s_COO1_pos, int* s_COO1_crd, double* s_COO_val
       s_capacity *= 2;
     }
     s_vals[ispos] = s_COO_val;
+    if (s1_rle_size <= ispos) {
+      s1_rle = (uint16_t*)realloc(s1_rle, sizeof(uint16_t) * (s1_rle_size * 2));
+      s1_rle_size *= 2;
+    }
     s1_rle[ispos] = 1;
-    ispos = ispos;
     ispos++;
     /* [lowerMergePoint] incIteratorVarStmts */
   }
@@ -492,11 +504,7 @@ int unpack(int** t_COO1_pos_ptr, int** t_COO1_crd_ptr, double** t_COO_vals_ptr, 
   int32_t i = 0;
 
   for (int32_t itpos = t1_pos[0]; itpos < t1_pos[1]; itpos++) {
-    int32_t t1_pos_off = 0;
-    int32_t t1_pos_save = itpos;
     for (int32_t t1_rep_iter = 0; t1_rep_iter < t1_rle[itpos]; t1_rep_iter++) {
-      t1_pos_off = 0;
-      itpos += t1_pos_off;
       if (t_COO_capacity <= it_COOpos) {
         t_COO_vals = (double*)realloc(t_COO_vals, sizeof(double) * (t_COO_capacity * 2));
         t_COO_capacity *= 2;
@@ -511,7 +519,7 @@ int unpack(int** t_COO1_pos_ptr, int** t_COO1_crd_ptr, double** t_COO_vals_ptr, 
       t_COO1_pos[1] = it_COOpos;
       i++;
     }
-    itpos = t1_pos_save;
+    itpos = itpos;
   }
 
   *t_COO1_pos_ptr = t_COO1_pos;

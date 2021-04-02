@@ -139,6 +139,19 @@ void printData(ostream& os, const Array& array) {
   os << "]";
 }
 
+template<>
+void printData<uint8_t>(ostream& os, const Array& array) {
+  const uint8_t* data = static_cast<const uint8_t*>(array.getData());
+  os << "[";
+  if (array.getSize() > 0) {
+    os << unsigned(data[0]);
+  }
+  for (size_t i = 1; i < array.getSize(); i++) {
+    os << ", " << unsigned(data[i]);
+  }
+  os << "]";
+}
+
 std::ostream& operator<<(std::ostream& os, const Array& array) {
   Datatype type = array.getType();
   switch (type.getKind()) {

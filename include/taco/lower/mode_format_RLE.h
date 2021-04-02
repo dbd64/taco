@@ -25,6 +25,8 @@ namespace taco {
 
         ir::Expr getWidth(Mode mode) const override;
 
+        Datatype IndexArrayType(int i) const override;
+
         ModeFunction coordIterBounds(std::vector<ir::Expr> parentCoords,
                                      Mode mode) const override;
 
@@ -75,11 +77,11 @@ namespace taco {
         bool equals(const ModeFormatImpl& other) const override;
 
         ir::Stmt storeIntoRle(ir::Expr pos, ir::Expr offset, ir::Expr repeat, ir::Expr valsCapacity, Mode mode) const;
-        ir::Stmt incrementRle(ir::Expr posVar, ir::Expr offset, ir::Expr valsCapacity, Mode mode) const;
 
         const long long allocSize;
 
         Datatype rle_elem_type;
+        uint64_t max_value() const;
     };
 
 }

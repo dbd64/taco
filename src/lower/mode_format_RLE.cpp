@@ -17,6 +17,8 @@
 #include "taco/util/strings.h"
 #include "taco/error.h"
 
+#include <limits>
+
 using namespace std;
 using namespace taco::ir;
 
@@ -71,6 +73,14 @@ namespace taco {
                                   rle_elem_type)};
     }
 
+    Datatype RLEModeFormat::IndexArrayType(int i) const {
+      switch (i){
+        case 0: return Int();
+        case 1 : return rle_elem_type;
+        default: taco_ierror; return Int();
+      }
+    }
+
     Expr RLEModeFormat::getPosArray(ModePack pack) const {
         return pack.getArray(0);
     }
@@ -117,7 +127,10 @@ namespace taco {
     bool RLEModeFormat::equals(const ModeFormatImpl& other) const {
         // TODO: Is this right?
         return ModeFormatImpl::equals(other) &&
-               (dynamic_cast<const RLEModeFormat&>(other).allocSize == allocSize);
+               (dynamic_cast<const RLEModeFormat&>(other).allocSize == allocSize) &&
+                (dynamic_cast<const RLEModeFormat&>(other).rle_elem_type == rle_elem_type) &&
+                (dynamic_cast<const RLEModeFormat&>(other).includeComments == includeComments)
+                ;
     }
 
     ModeFunction RLEModeFormat::coordIterBounds(std::vector<ir::Expr> parentCoords, Mode mode) const {
@@ -414,14 +427,20 @@ namespace taco {
       return Block::make({c0, initCs, finalizeLoop, c1});
     }
 
-    int powi(const int x, const unsigned int p)
-    {
-      if (p == 0) return 1;
-      if (p == 1) return x;
-
-      int tmp = powi(x, p/2);
-      if ((p % 2) == 0) { return tmp * tmp; }
-      else { return x * tmp * tmp; }
+    uint64_t RLEModeFormat::max_value() const {
+      taco_iassert(rle_elem_type.isUInt());
+      if (rle_elem_type == UInt8){
+        return std::numeric_limits<uint8_t>::max();
+      } else if (rle_elem_type == UInt16){
+        return std::numeric_limits<uint16_t>::max();
+      } else if (rle_elem_type == UInt32){
+        return std::numeric_limits<uint32_t>::max();
+      } else if (rle_elem_type == UInt64){
+        return std::numeric_limits<uint64_t>::max();
+      } else {
+        taco_ierror;
+        return 0;
+      }
     }
 
     Stmt RLEModeFormat::storeIntoRle(ir::Expr posVar, ir::Expr off, ir::Expr repeat, ir::Expr valsCapacity, Mode mode) const {
@@ -438,12 +457,12 @@ namespace taco {
         return Store::make(rleArray, p(ir::Add::make(off, off2)), val);
       };
 
-      int maxRle = powi(2, rle_elem_type.getNumBits())- 1;
+      uint64_t maxRle = max_value();
       if(const ir::Literal* lit = repeat.as<ir::Literal>()){
         taco_iassert(lit->type.isIntegral());
 
         if(lit->getIntValue() == 1){
-          Block::make(doubleSizeIfFull(rleArray, getRleCapacity(mode), p(off)),
+          return Block::make(doubleSizeIfFull(rleArray, getRleCapacity(mode), p(off)),
                              f(1));
         }
 
@@ -454,7 +473,7 @@ namespace taco {
         vector<Stmt> stmts;
         if(repeatLit < maxRle){
           stmts.push_back(doubleSizeIfFull(rleArray, getRleCapacity(mode), p(off)));
-          stmts.push_back(f(maxRle, 0));
+          stmts.push_back(f(repeatLit, 0));
         } else {
           taco_iassert(loopNum > 0); // repeatLit is greater than the current RLE slot, so we can assume the loop
                                         // runs more than once.
@@ -477,11 +496,11 @@ namespace taco {
         return Block::make(stmts);
       } else {
         // We need to generate the insertion loop from above
-        Expr loopVar = Var::make(mode.getName() + "_rle_store", Int());
-        Expr loopBound = Var::make(mode.getName() + "_rle_store_bound", Int());
-        Expr rleLeftOver = Var::make(mode.getName() + "_rle_left_over", Int());
-        Expr loopStart = Var::make(mode.getName() + "_rle_loop_start", Int());
-        Expr repeatVar = Var::make(mode.getName() + "_rle_repeat", Int());
+        Expr loopVar = Var::make(mode.getName() + "_rle_store", UInt64);
+        Expr loopBound = Var::make(mode.getName() + "_rle_store_bound", UInt64);
+        Expr rleLeftOver = Var::make(mode.getName() + "_rle_left_over", UInt64);
+        Expr loopStart = Var::make(mode.getName() + "_rle_loop_start", UInt64);
+        Expr repeatVar = Var::make(mode.getName() + "_rle_repeat", UInt64);
 
 
         vector<Stmt> stmts;
@@ -507,30 +526,5 @@ namespace taco {
         return ret;
       }
     }
-
-    Stmt RLEModeFormat::incrementRle(ir::Expr posVar, ir::Expr offset, ir::Expr valsCapacity, Mode mode) const {
-      int maxRle = powi(2, rle_elem_type.getNumBytes())- 1;
-      Expr rleArray = getRleArray(mode.getModePack());
-      Expr stride = (int)mode.getModePack().getNumModes();
-      Expr pos = ir::Add::make(posVar, offset);
-      Expr rle_pos = ir::Mul::make(pos, stride);
-      Expr rle_pos_1 = ir::Mul::make(ir::Add::make(pos,1), stride);
-      Expr valsArray = getValsArray(mode);
-
-      Expr rle_val = Load::make(rleArray, rle_pos);
-
-      Stmt eqBlock = Block::make(
-              doubleSizeIfFull(rleArray, getRleCapacity(mode), rle_pos_1),
-              doubleSizeIfFull(valsArray, valsCapacity, rle_pos_1),
-              Store::make(rleArray, rle_pos_1, 1),
-              Store::make(valsArray, rle_pos_1, Load::make(valsArray, rle_pos)),
-              Assign::make(posVar, ir::Add::make(posVar,1)));
-
-      return IfThenElse::make(Eq::make(rle_val, maxRle),
-                              eqBlock,
-                              Store::make(rleArray, rle_pos, ir::Add::make(1,rle_val))
-                       );
-    }
-
 
 }

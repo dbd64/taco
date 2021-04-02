@@ -40,93 +40,8 @@ gen_random_rle(std::string name, int size = 100, int lower_rle = 1,
   return r;
 }
 
-static size_t unpackTensorData(const taco_tensor_t& tensorData,
-                               const TensorBase& tensor) {
-  auto storage = tensor.getStorage();
-  auto format = storage.getFormat();
-
-  std::vector<ModeIndex> modeIndices;
-  size_t numVals = 1;
-  for (int i = 0; i < tensor.getOrder(); i++) {
-    ModeFormat modeType = format.getModeFormats()[i];
-    if (modeType.getName() == Dense.getName()) {
-      Array size = makeArray({*(int*)tensorData.indices[i][0]});
-      modeIndices.push_back(ModeIndex({size}));
-      numVals *= ((int*)tensorData.indices[i][0])[0];
-    } else if (modeType.getName() == Sparse.getName()) {
-      auto size = ((int*)tensorData.indices[i][0])[numVals];
-      Array pos = Array(type<int>(), tensorData.indices[i][0], numVals+1, Array::UserOwns);
-      Array idx = Array(type<int>(), tensorData.indices[i][1], size, Array::UserOwns);
-      modeIndices.push_back(ModeIndex({pos, idx}));
-      numVals = size;
-    } else if (modeType.getName() == Singleton.getName()) {
-      Array idx = Array(type<int>(), tensorData.indices[i][1], numVals, Array::UserOwns);
-      modeIndices.push_back(ModeIndex({makeArray(type<int>(), 0), idx}));
-    } else if (modeType.getName() == RLE.getName()) {
-      auto valsSize = ((int*)tensorData.indices[i][0])[numVals];
-      Array pos = Array(type<int>(), tensorData.indices[i][0], numVals+1, Array::UserOwns);
-      Array rle = Array(type<uint16_t>(), tensorData.indices[i][1], valsSize, Array::UserOwns);
-      modeIndices.push_back(ModeIndex({ pos, rle}));
-      numVals = valsSize;
-    } else {
-      taco_not_supported_yet;
-    }
-  }
-  storage.setIndex(Index(format, modeIndices));
-  storage.setValues(Array(tensor.getComponentType(), tensorData.vals, numVals));
-  return numVals;
-}
-
-template<class T, class R>
-void compress_rle(Tensor<T>& tt) {
-  taco_tensor_t* t = tt.getStorage();
-
-  int max_rle = std::numeric_limits<R>::max();
-
-  int32_t* t_pos = (int32_t*)(t->indices[0][0]);
-  R* t_rle = (R*)(t->indices[0][1]);
-  double* t_vals = (double*)(t->vals);
-
-  double* t_vals_new = (double*)malloc(sizeof(double)*t_pos[1]);
-  t_vals_new[0] = t_vals[0];
-
-  int32_t tnpos = 0;
-  double tnval = t_vals[0];
-
-  for (int32_t itpos = 1; itpos < t_pos[1]; itpos++){
-    double val = t_vals[itpos];
-    if (val == tnval){
-      if(t_rle[tnpos] == max_rle) {
-        tnpos++;
-        t_vals_new[tnpos] = tnval;
-        t_rle[tnpos] = 1;
-      } else {
-        t_rle[tnpos]++;
-      }
-    } else {
-      tnpos++;
-      tnval = val;
-      t_vals_new[tnpos] = tnval;
-      t_rle[tnpos] = 1;
-    }
-  }
-
-  void* res = realloc(t_vals_new, sizeof(double) * (tnpos+1));
-  if(!res){ taco_uerror; }
-  t->vals = (uint8_t*)res;
-
-  res = realloc(t_rle, sizeof(R) * (tnpos+1));
-  if(!res){ taco_uerror; }
-  t->indices[0][1] = (uint8_t*)res;
-
-  t_pos[1] = tnpos+1;
-
-  tt.content->valuesSize = unpackTensorData(*t, tt);
-}
-
-
 std::vector<std::pair<int, int>> rle_ranges = //{{1,10}, {1,1024}, {1024,2048}};
-    {{1, 10}, {1, 1024}, {1000, 10000}};
+    {{1, 10}, {1, 1000}, {1000, 10000}};
 constexpr int size_lower = 10;
 constexpr int size_upper = 10'000'000;
 constexpr int size_mult = 10;
@@ -134,10 +49,10 @@ constexpr int val_lower = 1;
 constexpr int val_upper = 100;
 constexpr int val_mult = 100;
 constexpr int rle_bits_lower = 8;
-constexpr int rle_bits_upper = 64;
+constexpr int rle_bits_upper = 32;
 constexpr int rle_bits_mult = 2;
 
-constexpr int numRandTensors = 50;
+constexpr int numRandTensors = 100;
 
 static void CustomArguments(benchmark::internal::Benchmark *b) {
   for (int i = size_lower; i <= size_upper; i *= size_mult) { // Size of vector
@@ -170,8 +85,8 @@ vpTensor& updateCurrent(int tsize, int upperVal, int lRle, int uRle, bool isDens
   return current;
 }
 
-vpTensor getCurrentR(int tsize, int upperVal, int lRle, int uRle, int r) {
-  if(r == 0) {
+vpTensor getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits) {
+  if(bits == 0) {
     return current;
   }
 
@@ -180,7 +95,7 @@ vpTensor getCurrentR(int tsize, int upperVal, int lRle, int uRle, int r) {
     updateCurrent(tsize, upperVal, lRle, uRle, true);
   }
 
-  Format rv({RLE_s(r)});
+  Format rv({RLE_s(bits)});
 
   vpTensor vs;
   bool toggle = true;
@@ -194,6 +109,7 @@ vpTensor getCurrentR(int tsize, int upperVal, int lRle, int uRle, int r) {
     IndexVar i("i");
     r(i) = d(i);
     r.evaluate();
+    compress_rle_b<double>(r, bits);
 
     vs.push_back(r);
   }
@@ -206,12 +122,12 @@ static void BM_all(benchmark::State &state) {
   int upperVal = state.range(1);
   int lRle = state.range(2);
   int uRle = state.range(3);
-  int r = state.range(4);
-  bool isDense = r == 0;
-  Format rv({RLE_s(r)});
+  int bits = state.range(4);
+  bool isDense = bits == 0;
+  Format rv({RLE_s(bits)});
 
   updateCurrent(tsize, upperVal, lRle, uRle, isDense);
-  auto res = getCurrentR(tsize, upperVal, lRle, uRle, r);
+  auto res = getCurrentR(tsize, upperVal, lRle, uRle, bits);
 
   for (auto _ : state) {
     for (int j = 0; j < numRandTensors; j++) {
