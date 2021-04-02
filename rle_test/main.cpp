@@ -11,7 +11,6 @@ std::default_random_engine gen(0);
 
 
 const Format dv({Dense});
-const Format rv({RLE});
 
 template <typename T = double>
 Tensor<T>
@@ -95,7 +94,7 @@ vpTensor getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits) {
     updateCurrent(tsize, upperVal, lRle, uRle, true);
   }
 
-  Format rv({RLE_s(bits)});
+  Format rv({RLE_s(bits, tsize)});
 
   vpTensor vs;
   bool toggle = true;
@@ -124,7 +123,7 @@ static void BM_all(benchmark::State &state) {
   int uRle = state.range(3);
   int bits = state.range(4);
   bool isDense = bits == 0;
-  Format rv({RLE_s(bits)});
+  Format rv({RLE_s(bits, tsize)});
 
   updateCurrent(tsize, upperVal, lRle, uRle, isDense);
   auto res = getCurrentR(tsize, upperVal, lRle, uRle, bits);
