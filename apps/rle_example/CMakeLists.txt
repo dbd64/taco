@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 project(rle_example)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 file(GLOB SOURCE_CODE ${PROJECT_SOURCE_DIR}/*.cpp)
 add_executable(${PROJECT_NAME} ${SOURCE_CODE})
 

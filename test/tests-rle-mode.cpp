@@ -27,62 +27,20 @@ std::ostream& operator<<(std::ostream& out, const std::vector<T>& v){
   return out;
 }
 
-template <class T, class R> uint64_t num_vals_rle(Tensor<T> &tt) {
-  taco_tensor_t *t = tt.getStorage();
-
-  int32_t *t_pos = (int32_t *)(t->indices[0][0]);
-  R *t_rle = (R *)(t->indices[0][1]);
-
-  uint64_t num_vals = 0;
-
-  for (int32_t itpos = 0; itpos < t_pos[1]; itpos++) {
-    num_vals += t_rle[itpos];
-  }
-  return num_vals;
-}
-
-template<class T, class R>
-void print_rle(taco_tensor_t* t, std::string name) {
-  int32_t* t_pos = (int32_t*)(t->indices[0][0]);
-  std::vector<int32_t> pos(t_pos, t_pos+2);
-
-  R* t_rle = (R*)(t->indices[0][1]);
-  std::vector<R> rle(t_rle, t_rle+pos[1]);
-
-  T* t_vals = (T*)(t->vals);
-  std::vector<T> vals(t_vals, t_vals+pos[1]);
-
-  std::cout << name << ":" << std::endl;
-  std::cout << "  pos  : " << pos << std::endl;
-  std::cout << "  rle  : " << rle << std::endl;
-  std::cout << "  vals : " << vals << std::endl;
-}
-
-template<class T>
-void print_rle(taco_tensor_t* t, std::string name, int bits) {
-  switch (bits) {
-    case 8:
-      print_rle<T, uint8_t>(t, name);
-      break;
-    case 16:
-      print_rle<T, uint16_t>(t, name);
-      break;
-    case 32:
-      print_rle<T, uint32_t>(t, name);
-      break;
-    case 64:
-      print_rle<T, uint64_t>(t, name);
-      break;
-    default:
-      taco_uerror;
+template <typename T>
+constexpr auto rand_dist(T lower, T upper) {
+  if constexpr (is_integral<T>::value) {
+    std::uniform_int_distribution<T> unif_vals(lower, upper);
+    return unif_vals;
+  } else {
+    std::uniform_real_distribution<T> unif_vals(lower, upper);
+    return unif_vals;
   }
 }
-
 
 template <typename T = double, int size = 100>
-Tensor<T> gen_random_dense(std::string name = "", int lower = 0,
-                           int upper = 1) {
-  std::uniform_int_distribution<T> unif(lower, upper);
+Tensor<T> gen_random_dense(std::string name = "", int lower = 0, int upper = 1) {
+  auto unif = rand_dist<int>(lower, upper);
 
   if (name.empty()) {
     name = "_";
@@ -92,7 +50,7 @@ Tensor<T> gen_random_dense(std::string name = "", int lower = 0,
 
   Tensor<T> d("d" + name, {size}, dv);
   for (int i = 0; i < d.getDimension(0); ++i) {
-    d.insert({i}, unif(gen));
+    d.insert({i}, (T) unif(gen));
   }
   d.pack();
 
@@ -126,7 +84,7 @@ std::pair<Tensor<T>, Tensor<T>>
 gen_random_rle(std::string name, int bits = 16, int lower_rle = 1,
                int upper_rle = 10, int lower = 0, int upper = 1) {
   std::uniform_int_distribution<T> unif_rle(lower_rle, upper_rle);
-  std::uniform_int_distribution<T> unif_vals(lower, upper);
+  auto unif_vals = rand_dist<int>(lower, upper);
 
   if (name.empty()) {
     name = "_";
@@ -139,7 +97,7 @@ gen_random_rle(std::string name, int bits = 16, int lower_rle = 1,
   int index;
   while (index < size) {
     int numCopies = min(unif_rle(gen), size - index);
-    int val = unif_vals(gen);
+    T val = (T) unif_vals(gen);
     for (int i = 0; i < numCopies; i++) {
       r.insert({index + i}, val);
     }
@@ -323,7 +281,7 @@ RLE_TEST_VEC_2_OP(div_mul_rle, /, *, double, 100)
 template <typename T = double>
 Tensor<T> gen_random_dense_mat(std::string name, int sizer = 100,
                                int sizec = 100, int lower = 0, int upper = 1) {
-  std::uniform_int_distribution<T> unif(lower, upper);
+  auto unif = rand_dist<int>(lower, upper);
 
   if (name.empty()) {
     name = "_";
@@ -334,7 +292,7 @@ Tensor<T> gen_random_dense_mat(std::string name, int sizer = 100,
   Tensor<double> d("d" + name, {sizer, sizec}, dm);
   for (int i = 0; i < d.getDimension(0); ++i) {
     for (int j = 0; j < d.getDimension(1); ++j) {
-      d.insert({i, j}, unif(gen));
+      d.insert({i, j}, (T)unif(gen));
     }
   }
   d.pack();

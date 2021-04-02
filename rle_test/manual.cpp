@@ -9,6 +9,7 @@ extern "C" {
 #include <cstdlib>
 #include <cstdint>
 #include <benchmark/benchmark.h>
+#include <type_traits>
 
 using namespace taco;
 
@@ -17,6 +18,18 @@ Format rv({RLE_s(16)});
 Format dv({Dense});
 
 std::default_random_engine gen(0);
+
+template <typename T>
+constexpr auto rand_dist(T lower, T upper) {
+  if constexpr (std::is_integral<T>::value) {
+    std::uniform_int_distribution<T> unif_vals(lower, upper);
+    return unif_vals;
+  } else {
+    std::uniform_real_distribution<T> unif_vals(lower, upper);
+    return unif_vals;
+  }
+}
+
 
 template <typename T>
 std::ostream& operator<<(std::ostream& out, const std::vector<T>& v){
@@ -36,7 +49,7 @@ Tensor<T>
 gen_random_rle(std::string name, int size = 100, int lower_rle = 1,
                int upper_rle = 512, int lower = 0, int upper = 1) {
   std::uniform_int_distribution<int> unif_rle(lower_rle, upper_rle);
-  std::uniform_int_distribution<T> unif_vals(lower, upper);
+  auto unif_vals = rand_dist<int>(lower, upper);
 
   if (name.empty()) {
     name = "_";
@@ -48,7 +61,7 @@ gen_random_rle(std::string name, int size = 100, int lower_rle = 1,
   int index = 0;
   while (index < size) {
     int numCopies = std::min(unif_rle(gen), size - index);
-    T val = unif_vals(gen);
+    T val = (T) unif_vals(gen);
     for (int i = 0; i < numCopies; i++) {
       r.insert({index + i}, val);
     }

@@ -11,6 +11,17 @@ const Format dv({Dense, Dense});
 const Format rv({Dense, RLE});
 const IndexVar i("i"), j("j"), k("k");
 
+template <typename T>
+constexpr auto rand_dist(T lower, T upper) {
+  if constexpr (is_integral<T>::value) {
+    std::uniform_int_distribution<T> unif_vals(lower, upper);
+    return unif_vals;
+  } else {
+    std::uniform_real_distribution<T> unif_vals(lower, upper);
+    return unif_vals;
+  }
+}
+
 template <typename T=double>
 std::pair<Tensor<T>, Tensor<T>> gen_random_rle(std::string name,
                                                int sizer= 100, int sizec=100,
@@ -18,7 +29,7 @@ std::pair<Tensor<T>, Tensor<T>> gen_random_rle(std::string name,
                                                int lower=0, int upper=1) {
   std::default_random_engine gen;
   std::uniform_int_distribution<int> unif_rle(lower_rle, upper_rle);
-  std::uniform_int_distribution<T> unif_vals(lower, upper);
+  auto unif_vals = rand_dist<int>(lower, upper);
 
   if (name.empty()){ name = "_"; }
   else { name = "_" + name + "_"; }
@@ -28,7 +39,7 @@ std::pair<Tensor<T>, Tensor<T>> gen_random_rle(std::string name,
     int index = 0;
     while (index < sizec) {
       int numCopies = min(unif_rle(gen), sizec - index);
-      T val = unif_vals(gen);
+      T val = (T) unif_vals(gen);
       for (int i = 0; i < numCopies; i++) {
         r.insert({x, index + i}, val);
       }

@@ -17,7 +17,7 @@ Tensor<T>
 gen_random_rle(std::string name, int size = 100, int lower_rle = 1,
                int upper_rle = 512, int lower = 0, int upper = 1) {
   std::uniform_int_distribution<int> unif_rle(lower_rle, upper_rle);
-  std::uniform_int_distribution<T> unif_vals(lower, upper);
+  std::uniform_int_distribution<int> unif_vals(lower, upper);
 
   if (name.empty()) {
     name = "_";
@@ -42,11 +42,11 @@ gen_random_rle(std::string name, int size = 100, int lower_rle = 1,
 std::vector<std::pair<int, int>> rle_ranges = //{{1,10}, {1,1024}, {1024,2048}};
     {{1, 10}, {1, 1000}, {1000, 10000}};
 constexpr int size_lower = 10;
-constexpr int size_upper = 10'000'000;
+constexpr int size_upper = 100'000'000;
 constexpr int size_mult = 10;
 constexpr int val_lower = 1;
 constexpr int val_upper = 100;
-constexpr int val_mult = 100;
+constexpr int val_mult = 10;
 constexpr int rle_bits_lower = 8;
 constexpr int rle_bits_upper = 32;
 constexpr int rle_bits_mult = 2;
@@ -147,6 +147,6 @@ static void BM_all(benchmark::State &state) {
   }
 }
 
-BENCHMARK(BM_all)->Apply(CustomArguments)->ArgNames({"size", "value_upper", "rle_lower", "rle_upper", "rle_bits"})->MeasureProcessCPUTime()->Unit(benchmark::kMicrosecond); //->Repetitions(10)->ReportAggregatesOnly(false)->DisplayAggregatesOnly(false);
+BENCHMARK(BM_all)->Apply(CustomArguments)->ArgNames({"size", "value_upper", "rle_lower", "rle_upper", "rle_bits"})->MeasureProcessCPUTime()->Unit(benchmark::kMicrosecond)->Repetitions(10)->ReportAggregatesOnly(false);
 
 BENCHMARK_MAIN();
