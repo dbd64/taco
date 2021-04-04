@@ -586,6 +586,7 @@ int main(int argc, char* argv[]) {
   bool writeCompute        = false;
   bool writeAssemble       = false;
   bool writeKernels        = false;
+  bool writeKernelHeader  = false;
   bool loaded              = false;
   bool verify              = false;
   bool time                = false;
@@ -621,6 +622,7 @@ int main(int argc, char* argv[]) {
   string writeComputeFilename;
   string writeAssembleFilename;
   string writeKernelFilename;
+  string writeKernelHeaderFilename;
   string writeTimeFilename;
   vector<string> declaredTensors;
 
@@ -679,6 +681,12 @@ int main(int argc, char* argv[]) {
             break;
           case 'r':
             modeTypes.push_back(ModeFormat::RLE);
+            break;
+          case 't':
+            modeTypes.push_back(RLE_s(8));
+            break;
+          case 'y':
+            modeTypes.push_back(RLE_s(32));
             break;
           default:
             return reportError("Incorrect format descriptor", 3);
@@ -889,6 +897,10 @@ int main(int argc, char* argv[]) {
     else if ("-write-source" == argName) {
       writeKernelFilename = argValue;
       writeKernels = true;
+    }
+    else if ("-write-header" == argName) {
+      writeKernelHeaderFilename = argValue;
+      writeKernelHeader = true;
     }
     else if ("-read-source" == argName) {
       kernelFilenames.push_back(argValue);
@@ -1357,6 +1369,45 @@ int main(int argc, char* argv[]) {
     filestream << endl;
     std::shared_ptr<ir::CodeGen> codegenFile =
         ir::CodeGen::init_default(filestream, ir::CodeGen::ImplementationGen);
+    bool hasPrinted = false;
+
+    if (compute.defined() ) {
+      codegenFile->compile(compute, !hasPrinted);
+      hasPrinted = true;
+    }
+    if (assemble.defined() ) {
+      codegenFile->compile(assemble, !hasPrinted);
+      hasPrinted = true;
+    }
+    if (evaluate.defined() ) {
+      codegenFile->compile(evaluate, !hasPrinted);
+      hasPrinted = true;
+    }
+
+    if (unpack.defined() ) {
+      filestream << endl << packComment << endl;
+    }
+    for (auto pack : packs) {
+      codegenFile->compile(pack, !hasPrinted);
+      hasPrinted = true;
+    }
+    if (unpack.defined() ) {
+      codegenFile->compile(unpack, !hasPrinted);
+      hasPrinted = true;
+    }
+
+    filestream.close();
+  }
+
+  if (writeKernels) {
+    std::ofstream filestream;
+    filestream.open(writeKernelHeaderFilename,
+                    std::ofstream::out|std::ofstream::trunc);
+    filestream << gentext << endl << "// ";
+    printCommandLine(filestream, argc, argv);
+    filestream << endl;
+    std::shared_ptr<ir::CodeGen> codegenFile =
+            ir::CodeGen::init_default(filestream, ir::CodeGen::HeaderGen);
     bool hasPrinted = false;
 
     if (compute.defined() ) {

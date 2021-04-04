@@ -91,9 +91,9 @@ public:
     }
     return ret;
   }
+  vector<double> times;
 
 protected:
-  vector<double> times;
   TimePoint begin;
 private:
   int dummySize = 3000000;

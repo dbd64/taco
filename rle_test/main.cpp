@@ -79,12 +79,18 @@ vpTensor& updateCurrent(int tsize, int upperVal, int lRle, int uRle, bool isDens
       vs.push_back(d0);
       vs.push_back(d1);
     }
-    current = vs;
+    current.swap(vs);
   }
   return current;
 }
 
-vpTensor getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits) {
+std::string name0("r0");
+std::string name1("r1");
+std::string name2("s0");
+std::string name3("s1");
+bool name_toggle = false;
+
+vpTensor& getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits) {
   if(bits == 0) {
     return current;
   }
@@ -98,22 +104,26 @@ vpTensor getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits) {
 
   vpTensor vs;
   bool toggle = true;
-  std::string name0("r0");
-  std::string name1("r1");
 
   for(auto& d : current){
-    std::string name = toggle? name0: name1;
+    std::string name = name_toggle ? (toggle? name0: name1) : (toggle? name2: name3);
     toggle = !toggle;
     Tensor<double> r(name, {tsize}, rv);
     IndexVar i("i");
     r(i) = d(i);
-    r.evaluate();
+    r.setAssembleWhileCompute(true);
+    r.compile();
+    r.assemble();
+    r.compute();
     compress_rle_b<double>(r, bits);
 
     vs.push_back(r);
   }
 
-  return vs;
+  name_toggle = !name_toggle;
+  current.swap(vs);
+
+  return current;
 }
 
 static void BM_all(benchmark::State &state) {
@@ -147,6 +157,11 @@ static void BM_all(benchmark::State &state) {
   }
 }
 
-BENCHMARK(BM_all)->Apply(CustomArguments)->ArgNames({"size", "value_upper", "rle_lower", "rle_upper", "rle_bits"})->MeasureProcessCPUTime()->Unit(benchmark::kMicrosecond)->Repetitions(10)->ReportAggregatesOnly(false);
+BENCHMARK(BM_all)->Apply(CustomArguments)\
+                 ->ArgNames({"size", "value_upper", "rle_lower", "rle_upper", "rle_bits"})\
+                 ->MeasureProcessCPUTime()\
+                 ->Unit(benchmark::kMicrosecond)
+                 ;
+                 //->Repetitions(10)->ReportAggregatesOnly(false)->DisplayAggregatesOnly(false);
 
 BENCHMARK_MAIN();
