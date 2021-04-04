@@ -18,7 +18,6 @@
 #include <random>
 #include <cstdlib>
 #include <cstdint>
-#include <benchmark/benchmark.h>
 
 using namespace taco;
 
@@ -257,8 +256,6 @@ void rle_bench(int size, int bits, int repeat, Tensor<double>& r0, Tensor<double
     TIME_REPEAT({
        auto e = init_expected(size, false);
        compute(e,l,r);
-       benchmark::DoNotOptimize(expected);
-       benchmark::ClobberMemory();
        deinit_taco_tensor_t(e);
      }, repeat, timer, timeRLE, false);
   }
@@ -281,8 +278,6 @@ void dense_bench(int size, int repeat, Tensor<double>& d0, Tensor<double>& d1){
     TIME_REPEAT({
                        auto e = init_expected(size, true);
                        compute_dense(e,l,r);
-                       benchmark::DoNotOptimize(expected);
-                       benchmark::ClobberMemory();
                        deinit_taco_tensor_t(e);
                      }, repeat, timer, timeDense, false);
   }

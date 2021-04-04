@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(rle_bench_vec)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -DSIZE=${SIZE}")
 
-add_compile_definitions(SIZE=${SIZE})
+# add_compile_definitions(SIZE=${SIZE})
 add_compile_definitions(REPEAT=${REPEAT})
 add_compile_definitions(LOWER_RLE=${LOWER_RLE})
 add_compile_definitions(UPPER_RLE=${UPPER_RLE})
@@ -20,10 +20,10 @@ if(NOT TACO_INCLUDE_DIR)
   set(TACO_INCLUDE_DIR $ENV{TACO_INCLUDE_DIR})
   set(TACO_LIBRARY_DIR $ENV{TACO_LIBRARY_DIR})
   find_library(taco taco ${TACO_LIBRARY_DIR})
-  target_link_libraries(${PROJECT_NAME} LINK_PUBLIC ${taco} benchmark::benchmark)
+  target_link_libraries(${PROJECT_NAME} LINK_PUBLIC ${taco})
 else()
   set_target_properties("${PROJECT_NAME}" PROPERTIES OUTPUT_NAME "${PROJECT_NAME}")
-  target_link_libraries(${PROJECT_NAME} LINK_PUBLIC taco benchmark::benchmark)
+  target_link_libraries(${PROJECT_NAME} LINK_PUBLIC taco)
 endif()
 
 # Include taco headers
