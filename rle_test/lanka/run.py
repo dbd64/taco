@@ -54,7 +54,6 @@ def process_raw_data(line):
 
 def append_row(rle_range, value_range, size,  bits,tensor_num, data):
   prefix = "{},{},{},{},{},{},{},".format(rle_range[0], rle_range[1],value_range[0], value_range[1],size,bits,tensor_num)
-  acc= ""; [acc := acc + str(x) if acc == "" else acc + "," + str(x) for x in data]
   acc = reduce(lambda acc,x: acc + str(x) if acc == "" else acc + "," + str(x), data, "") 
 
   append_line(prefix + acc)
