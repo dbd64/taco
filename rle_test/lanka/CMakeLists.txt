@@ -1,14 +1,7 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(rle_bench_vec)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -DSIZE=${SIZE}")
-
-# add_compile_definitions(SIZE=${SIZE})
-add_compile_definitions(REPEAT=${REPEAT})
-add_compile_definitions(LOWER_RLE=${LOWER_RLE})
-add_compile_definitions(UPPER_RLE=${UPPER_RLE})
-add_compile_definitions(UPPER_VAL=${UPPER_VAL})
-add_compile_definitions(RLE_BITS=${RLE_BITS})
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -DSIZE=${SIZE} -DREPEAT=${REPEAT}  -DLOWER_RLE=${LOWER_RLE} -DUPPER_RLE=${UPPER_RLE} -DUPPER_VAL=${UPPER_VAL} -DRLE_BITS=${RLE_BITS}")
 
 add_executable(${PROJECT_NAME} bench.cpp vec_dense.c vec_rle.c)
 
