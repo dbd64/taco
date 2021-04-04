@@ -61,7 +61,7 @@ def append_row(rle_range, value_range, size,  bits,tensor_num, data):
 def run_benchmark(rle_range, value_range, size,  bits, tensor_num):
   # Run the benchmark binary
   print("Running: {},{},{},{},{},{},{}".format(rle_range[0], rle_range[1],value_range[0], value_range[1],size,bits,tensor_num))
-  result = subprocess.run(["./rle_bench_vec"], check=True, capture_output=True, text=True, cwd="TMP_BUILD")
+  result = subprocess.run(["./rle_bench_vec"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd="TMP_BUILD")
 
   # Parse and Store results
   lines = result.stdout.split("\n")
