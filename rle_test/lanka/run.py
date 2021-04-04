@@ -1,5 +1,6 @@
 import subprocess
 import os
+from functools import reduce
 
 REPEAT = 200
 TACO_TOOL = "/Users/danieldonenfeld/Developer/taco/cmake-build-release-lanka/bin/taco"
@@ -11,7 +12,8 @@ def append_line(line):
 
 def write_csv_header():
   prefix = "{},{},{},{},{},{},{},".format("rle_low", "rle_high", "value_low", "value_high","size","bits", "tensor_num")
-  acc= ""; [acc := acc + str(x) if acc == "" else acc + "," + str(x) for x in range(REPEAT- 2*int(REPEAT*0.1))]
+
+  acc = reduce(lambda acc,x: acc + str(x) if acc == "" else acc + "," + str(x), range(REPEAT- 2*int(REPEAT*0.1)), "") 
 
   with open(OUT_CSV, "w") as file:
     file.write(prefix+acc + "\n")
@@ -53,6 +55,8 @@ def process_raw_data(line):
 def append_row(rle_range, value_range, size,  bits,tensor_num, data):
   prefix = "{},{},{},{},{},{},{},".format(rle_range[0], rle_range[1],value_range[0], value_range[1],size,bits,tensor_num)
   acc= ""; [acc := acc + str(x) if acc == "" else acc + "," + str(x) for x in data]
+  acc = reduce(lambda acc,x: acc + str(x) if acc == "" else acc + "," + str(x), data, "") 
+
   append_line(prefix + acc)
 
 def run_benchmark(rle_range, value_range, size,  bits, tensor_num):
