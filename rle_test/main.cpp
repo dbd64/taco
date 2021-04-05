@@ -7,7 +7,10 @@
 
 using namespace taco;
 
-std::default_random_engine gen(0);
+#ifndef SEED
+  #define SEED 0
+#endif
+std::default_random_engine gen(SEED);
 
 
 const Format dv({Dense});
@@ -39,28 +42,42 @@ gen_random_rle(std::string name, int size = 100, int lower_rle = 1,
   return r;
 }
 
-std::vector<std::pair<int, int>> rle_ranges = //{{1,10}, {1,1024}, {1024,2048}};
-    {{1, 10}, {1, 1000}, {1000, 10000}};
-constexpr int size_lower = 10;
+using ranges = std::vector<std::pair<int, int>>;
+
+ranges get_rle_ranges(){
+  ranges r;
+  for(int i=2; i<= 64; i*=2){
+    r.push_back({1,i});
+  }
+  return r;
+}
+
+ranges rle_ranges = //{{1, 10}, {1, 1000}, {1000, 10000}};
+    get_rle_ranges();
+constexpr int size_lower = 1'000;
 constexpr int size_upper = 100'000'000;
 constexpr int size_mult = 10;
 constexpr int val_lower = 1;
-constexpr int val_upper = 100;
-constexpr int val_mult = 10;
-constexpr int rle_bits_lower = 8;
+constexpr int val_upper = 1;
+constexpr int val_mult = 100;
+constexpr int rle_bits_lower = 16;
 constexpr int rle_bits_upper = 32;
 constexpr int rle_bits_mult = 2;
 
-constexpr int numRandTensors = 100;
+//constexpr int numRandTensors = 10;
+int numRandTensors = 0;
+constexpr int minElements = 100'000;
 
 static void CustomArguments(benchmark::internal::Benchmark *b) {
   for (int i = size_lower; i <= size_upper; i *= size_mult) { // Size of vector
     for (int j = val_lower; j <= val_upper; j *= val_mult) {          // Upper limit of values
       for (auto &x : rle_ranges) { // bounds on rle values
         auto[l, u] = x;
-        b->Args({i, j, l, u, 0});
+        b->Args({i, j, l, u, 0, false});
         for(int r = rle_bits_lower; r <= rle_bits_upper; r*= rle_bits_mult) {
-          b->Args({i, j, l, u, r});
+          b->Args({i, j, l, u, r, false});
+          if(r > 8)
+            b->Args({i, j, l, u, r, true});
         }
       }
     }
@@ -72,6 +89,7 @@ vpTensor current;
 vpTensor& updateCurrent(int tsize, int upperVal, int lRle, int uRle, bool isDense){
   if(isDense){
     vpTensor vs;
+    numRandTensors = std::max(minElements/tsize, 1);
     for (int k = 0; k < numRandTensors; k++) {
       auto d0 = gen_random_rle<double>("0", tsize, lRle, uRle, 0, upperVal);
       auto d1 = gen_random_rle<double>("1", tsize, lRle, uRle, 0, upperVal);
@@ -90,7 +108,7 @@ std::string name2("s0");
 std::string name3("s1");
 bool name_toggle = false;
 
-vpTensor& getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits) {
+vpTensor& getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits, bool elide_overflow_checks) {
   if(bits == 0) {
     return current;
   }
@@ -100,7 +118,7 @@ vpTensor& getCurrentR(int tsize, int upperVal, int lRle, int uRle, int bits) {
     updateCurrent(tsize, upperVal, lRle, uRle, true);
   }
 
-  Format rv({RLE_s(bits, tsize)});
+  Format rv({RLE_s(bits, elide_overflow_checks, tsize)});
 
   vpTensor vs;
   bool toggle = true;
@@ -132,14 +150,16 @@ static void BM_all(benchmark::State &state) {
   int lRle = state.range(2);
   int uRle = state.range(3);
   int bits = state.range(4);
+  bool elide_overflow_checks = state.range(5);
   bool isDense = bits == 0;
-  Format rv({RLE_s(bits, tsize)});
+  Format rv({RLE_s(bits, elide_overflow_checks, tsize)});
 
   updateCurrent(tsize, upperVal, lRle, uRle, isDense);
-  auto res = getCurrentR(tsize, upperVal, lRle, uRle, bits);
+  auto res = getCurrentR(tsize, upperVal, lRle, uRle, bits, elide_overflow_checks);
+  int numTensors = res.size()/2;
 
   for (auto _ : state) {
-    for (int j = 0; j < numRandTensors; j++) {
+    for (int j = 0; j < numTensors; j++) {
       state.PauseTiming();
       auto d0 = res[2 * j];
       auto d1 = res[2 * j + 1];
@@ -155,6 +175,29 @@ static void BM_all(benchmark::State &state) {
       expected.compute();
     }
   }
+
+  int t0_vals_size_total = 0;
+  int t1_vals_size_total = 0;
+  for (int j = 0; j < numTensors; j++) {
+    state.PauseTiming();
+    auto d0 = res[2 * j];
+    auto d1 = res[2 * j + 1];
+    if(isDense){
+      t0_vals_size_total += tsize;
+      t1_vals_size_total += tsize;
+    } else {
+      taco_tensor_t *t0 = d0.getStorage();
+      t0_vals_size_total += ((int32_t *)(t0->indices[0][0]))[1];
+
+      taco_tensor_t *t1 = d0.getStorage();
+      t1_vals_size_total += ((int32_t *)(t1->indices[0][0]))[1];
+    }
+  }
+
+  state.counters.insert({{"num_tensors", numTensors},
+                            {"t0_vals_size_total", t0_vals_size_total},
+                            {"t1_vals_size_total", t1_vals_size_total}});
+
 }
 
 BENCHMARK(BM_all)->Apply(CustomArguments)\

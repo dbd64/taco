@@ -2,10 +2,15 @@
 
 import json
 import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
+import math
+
+
+plt.rcParams['figure.dpi'] = 600
 
 path_res = '/Users/danieldonenfeld/Developer/taco/rle_test/bench_vec_out.json'
-path_out = '/Users/danieldonenfeld/Developer/taco/rle_test/plots_vec_rlebits_1/'
+path_out = '/Users/danieldonenfeld/Developer/taco/rle_test/plots_vec_rlebits_4/'
 
 # path_res = '/Users/danieldonenfeld/Developer/taco/rle_test/bench_mat_out.json'
 # path_out = '/Users/danieldonenfeld/Developer/taco/rle_test/plots_mat/'
@@ -20,27 +25,47 @@ def to_str(lst):
     s = ""
     for e in lst:
         s += str(e) + ","
-    return s
+    return s[:-1]
 
 
-def process_benchmark(b, d, s, sg):
-    name = b['name']
+def parse_name(name):
     name = name.split('/')
-
     _, size = split_name_str(name[1])
     vals_l = 0
     _, vals_u = split_name_str(name[2])
     _, rle_l = split_name_str(name[3])
     _, rle_u = split_name_str(name[4])
     _, rle_bits = split_name_str(name[5])
+    elide_overflow_checks = bool(int(name[6]))
+    return (int(size), int(vals_l), int(vals_u), int(rle_l), int(rle_u), int(rle_bits), elide_overflow_checks)
+
+
+def process_benchmark(b, d, s, sg):
+    size, vals_l, vals_u, rle_l, rle_u, rle_bits, elide_overflow = parse_name(b['name'])
 
     s.add(rle_bits)
     sg.add(to_str([vals_l, vals_u, rle_l, rle_u]))
 
-    d_key = to_str([vals_l, vals_u, rle_l, rle_u, rle_bits])
+    d_key = to_str([vals_l, vals_u, rle_l, rle_u, rle_bits, elide_overflow])
     xs, ys = d.setdefault(d_key, ([], []))
     xs.append(size)
     ys.append(b['cpu_time'])
+
+
+def process_all():
+    with open(path_res) as f:
+        data = json.load(f)
+
+    d = dict()
+    s = set()
+    sg = set()
+
+    for b in data['benchmarks']:
+        process_benchmark(b, d, s, sg)
+    
+    rle_bits_l = list([int(i) for i in s])
+    rle_bits_l.sort()
+    return (d,rle_bits_l,sg)
 
 
 def add_bars(ax, xs_all, ys_lists, ind, width):
@@ -57,107 +82,93 @@ def add_bars(ax, xs_all, ys_lists, ind, width):
     return rects
 
 
-with open(path_res) as f:
-    data = json.load(f)
+def create_data_frame(xs, ys_lists, names):
+    columns = ['Vector Length'] + names
 
-d = dict()
-s = set()
-sg = set()
+    ys_groups = list(zip(*ys_lists))
+    ys_groups = list(map(lambda x: [x[0]/i for i in x], ys_groups))
+    ys_groups = list(map(lambda x: ["{:1.0e}".format(int(xs[x[0]]))]+list(x[1]), zip(range(len(ys_groups)), ys_groups)))
 
-for b in data['benchmarks']:
-    process_benchmark(b, d, s, sg)
+    df = pd.DataFrame(ys_groups, columns=columns)
+    return df
 
-rle_bits_l = list(s)
-rle_bits_l.sort()
+def create_bar_charts():
+    d,rle_bits_l,sg = process_all()
 
-for g in sg:
-    # Each iteration should produce one graph
-    print(g)
 
-    fig, ax = plt.subplots()
+    for g in sg:
+        # Each iteration should produce one graph
+        print(g)
 
-    data = []
-    for bits in rle_bits_l:
-        g_key = g + str(bits) + ","
-        xs, ys = d[g_key]
-        data.append((xs, ys))
+        fig, ax = plt.subplots()
 
-    g = g.split(',')
+        data = []
+        for bits in rle_bits_l:
+            g_key = g + "," + str(bits) + ",False"
+            xs, ys = d[g_key]
+            name = "rle " + str(bits) + " bits" if bits > 0 else "dense"
+            data.append((xs, ys, name))
+            if (bits > 8):
+                name += "[NOC]"
+                g_key = g + "," + str(bits) + ",True"
+                xs, ys = d[g_key]
+                data.append((xs, ys, name))
 
-    xs_all = data[0][0]
-    for xs, ys in data:
-        if not (xs == xs_all):
-            print("ERROR! x values not same")
 
-    ys_lists = []
-    for xs, ys in data:
-        ys_lists.append(ys)
+        g = g.split(',')
 
-    N = len(xs_all)
-    ind = np.arange(N)
-    width = 0.6
-    num_bars = len(rle_bits_l)
-    labels = list(map(lambda x: "{:.0e}".format(int(x)), xs_all))
+        xs_all = data[0][0]
+        for xs, ys, name in data:
+            if not (xs == xs_all):
+                print("ERROR! x values not same")
 
-    rects = add_bars(ax, xs_all, ys_lists, ind, width)
-    ax.set_yscale('log')
-    ax.set_xlabel('Vector Length')
-    ax.set_ylabel('Time (us)')
-    ax.set_title("Values: [" + g[0] + "," + g[1] +
-                 "], RLE: [" + g[2] + "," + g[3] + "]")
-    ax.set_xticks(ind)
-    ax.set_xticklabels(labels)
-    ax.legend(loc="best")
+        ys_lists = [ys for _,ys,_ in data]
+        names = [name for _,_,name in data]
+        # for xs, ys in data:
+        #     ys_lists.append(ys)
 
-    fig.tight_layout()
-    plt.savefig(path_out+"Values_" + g[0] + "_" + g[1] + "__rle_" + g[2] + "_"
-                + g[3] + ".png")
+        df = create_data_frame(xs_all, ys_lists, names)
+                
+        # plot grouped bar chart
+        df.plot(x='Vector Length',
+                kind='bar',
+                stacked=False,
+                title="Values: [" + g[0] + "," + g[1] +
+                    "], RLE: [" + g[2] + "," + g[3] + "]")
+
+        plt.tight_layout()
+        plt.savefig(path_out+"Values_" + g[0] + "_" + g[1] + "_rle_" + g[2] + "_"
+                    + g[3] + ".png")
+        plt.close()
+
+
+def create_scatter():
+    with open(path_res) as f:
+        data = json.load(f)
+
+    l = []
+
+    for b in data['benchmarks']:
+        size, vals_l, vals_u, rle_l, rle_u, rle_bits, elide_overflow = parse_name(b['name'])
+
+        total_vals = int(b['t0_vals_size_total']) + int(b['t1_vals_size_total'])
+        time = float(b['cpu_time'])
+        throughput = total_vals/time
+
+        l.append([rle_bits, throughput, math.log10(size)])
+
+    df = pd.DataFrame(l,
+                columns=['bits', 'throughput', 'size'])
+    ax1 = df.plot.scatter(x='bits',
+                    y='throughput',
+                    c='size',
+                    colormap='viridis',
+                    s=3)
+    plt.tight_layout()
+    plt.savefig(path_out+"scatter.png")
     plt.close()
 
 
-# def autolabel(rects_l, rects_r, data_l, data_r):
-#     data_zip = zip(data_l, data_r)
-#     labels = list(map(lambda x: "{:10.2f}".format(x[0]/x[1]), data_zip))
-
-#     for l, r, v in zip(rects_l, rects_r, labels):
-#         height = max(l.get_height(), r.get_height())
-#         ax.annotate('{}'.format(v),
-#                     # xy=(rect.get_x() + rect.get_width() / 2, height),
-#                     xy=(r.get_x() - r.get_width()/4, height),
-#                     xytext=(0, 2),  # 3 points vertical offset
-#                     textcoords="offset points",
-#                     ha='center', va='bottom')
-
-
-# for k, v in d.items():
-#     print(k)
-
-#     fig, ax = plt.subplots()
-
-#     dense_data_x, dense_data_y, rle_data_x, rle_data_y = v
-
-#     if not (dense_data_x == rle_data_x):
-#         print("ERROR! x values not same")
-
-#     N = len(dense_data_x)
-#     ind = np.arange(N)
-#     width = 0.4
-
-#     labels = list(map(lambda x: "{:.0e}".format(int(x)), dense_data_x))
-
-#     rects_dense = ax.bar(ind - width/2, dense_data_y, width, label="dense")
-#     rects_rle = ax.bar(ind + width/2, rle_data_y, width, label='RLE')
-#     ax.set_yscale('log')
-#     # ax.set_xlabel('Vector Length')
-#     ax.set_xlabel('Matrix Size')
-#     ax.set_ylabel('Time (ms)')
-#     ax.set_title(k)
-#     ax.set_xticks(ind)
-#     ax.set_xticklabels(labels)
-#     ax.legend(loc="best")
-
-#     autolabel(rects_dense, rects_rle, dense_data_y, rle_data_y)
-
-#     fig.tight_layout()
-#     plt.savefig(path_out+k+".png")
-#     plt.close()
+if __name__ == "__main__":
+    create_bar_charts()
+    create_scatter()

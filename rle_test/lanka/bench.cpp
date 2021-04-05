@@ -313,7 +313,6 @@ void dense_bench(int size, int repeat, Tensor<double>& d0, Tensor<double>& d1){
 #define RLE_BITS 16
 #endif
 
-
 int main(int argc, char** argv) {
   int size = SIZE;
   int repeat = REPEAT;
@@ -322,22 +321,10 @@ int main(int argc, char** argv) {
   int upper_val = UPPER_VAL;
   int bits = RLE_BITS;
 
-//  Format rv({RLE_s(bits)});
-//  Tensor<double> r0("r0", {size}, rv);
-//  Tensor<double> r1("r1", {size}, rv);
-//  fill_rle_b<double>(r0, bits, size, lower_rle, upper_rle, 0, upper_val);
-//  fill_rle_b<double>(r1, bits, size, lower_rle, upper_rle, 0, upper_val);
-
   auto r0 = gen_random_rle<double>("0", bits, size, lower_rle, upper_rle, 0, upper_val);
   auto r1 = gen_random_rle<double>("1", bits, size, lower_rle, upper_rle, 0, upper_val);
   compress_rle_b<double>(r0, bits);
   compress_rle_b<double>(r1, bits);
-
-//  std::cout << r0 << std::endl << std::endl;
-//  std::cout << r1 << std::endl << std::endl;
-//
-//  print_rle_b<double>(r0.getTacoTensorT(), bits, "r0");
-//  print_rle_b<double>(r1.getTacoTensorT(), bits, "r1");
 
   rle_bench(size, bits, repeat, r0, r1);
 

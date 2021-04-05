@@ -28,11 +28,12 @@ namespace taco {
         RLEModeFormat(true, true) {
     }
 
-    RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, Datatype rle_elem_type, bool includeComments, long long allocSize) :
+    RLEModeFormat::RLEModeFormat(bool isFull, bool isUnique, Datatype rle_elem_type, bool elide_overflow_check,
+                                 bool includeComments, long long allocSize) :
             ModeFormatImpl("rle", isFull, true, isUnique, false, true, false,
                            true, false, false, false, true,
                            false, false, false, true, true),
-            includeComments(includeComments), allocSize(allocSize), rle_elem_type(rle_elem_type) {
+            includeComments(includeComments), allocSize(allocSize), elide_overflow_check(elide_overflow_check), rle_elem_type(rle_elem_type) {
       taco_uassert(rle_elem_type.isUInt());
     }
 
@@ -129,7 +130,8 @@ namespace taco {
         return ModeFormatImpl::equals(other) &&
                (dynamic_cast<const RLEModeFormat&>(other).allocSize == allocSize) &&
                 (dynamic_cast<const RLEModeFormat&>(other).rle_elem_type == rle_elem_type) &&
-                (dynamic_cast<const RLEModeFormat&>(other).includeComments == includeComments)
+                (dynamic_cast<const RLEModeFormat&>(other).includeComments == includeComments) &&
+                (dynamic_cast<const RLEModeFormat&>(other).elide_overflow_check == elide_overflow_check)
                 ;
     }
 
@@ -454,8 +456,12 @@ namespace taco {
       };
 
       auto f = [&](Expr val, Expr off2 = 0){
-        return Store::make(rleArray, p(ir::Add::make(off, off2)), val);
+          return Store::make(rleArray, p(ir::Add::make(off, off2)), val);
       };
+
+      if (elide_overflow_check){
+        return f(repeat);
+      }
 
       uint64_t maxRle = max_value();
       if(const ir::Literal* lit = repeat.as<ir::Literal>()){

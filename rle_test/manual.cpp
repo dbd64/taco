@@ -174,22 +174,49 @@ void dense_bench(int size, int repeat, Tensor<double>& d0, Tensor<double>& d1){
             << timeDense << std::endl;
 }
 
+#ifndef SIZE
+#define SIZE 10'000
+#endif
+
+#ifndef REPEAT
+#define REPEAT 1'000
+#endif
+
+#ifndef LOWER_RLE
+#define LOWER_RLE 1'000
+#endif
+
+#ifndef UPPER_RLE
+#define UPPER_RLE 10'000
+#endif
+
+#ifndef UPPER_VAL
+#define UPPER_VAL 1
+#endif
+
+#ifndef BITS
+#define BITS 16
+#endif
+
+
 int main(int argc, char** argv) {
-  int size = 5'000'000;
-  int repeat = 1000;
+  int size = SIZE;
+  int repeat = REPEAT;
+  int lower_rle = LOWER_RLE;
+  int upper_rle = UPPER_RLE;
+  int upper_val = UPPER_VAL;
+  int bits = BITS;
 
-  auto r0 = gen_random_rle<double>("0", size, 1'000, 10'000);
-  auto r1 = gen_random_rle<double>("1", size, 1'000, 10'000);
+  auto r0 = gen_random_rle<double>("0", size, lower_rle, upper_rle, 0, upper_val);
+  auto r1 = gen_random_rle<double>("1", size, lower_rle, upper_rle, 0, upper_val);
 
-  compress_rle_b<double>(r0,16);
-  compress_rle_b<double>(r1, 16);
+  compress_rle_b<double>(r0,bits);
+  compress_rle_b<double>(r1, bits);
 
-  std::cout << r0 << std::endl << std::endl;
-  std::cout << r1 << std::endl << std::endl;
+//  std::cout << r0 << std::endl << std::endl;
+//  std::cout << r1 << std::endl << std::endl;
 
-  std::cout << "STARTING rle!" << std::endl;
   rle_bench(size, repeat, r0, r1);
-  std::cout << "DONE rle!" << std::endl;
 
   {
     IndexVar i("i");

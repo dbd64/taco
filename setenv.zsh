@@ -8,3 +8,5 @@ export TACO_CC="$LLVM_DIR/bin/clang $CPPFLAGS $LDFLAGS"
 
 export TACO_INCLUDE_DIR=${0:a:h}/include
 export TACO_LIBRARY_DIR=${0:a:h}/cmake-build-relwithdebinfo/lib
+
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$TACO_LIBRARY_DIR

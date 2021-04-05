@@ -14,6 +14,7 @@ namespace taco {
         RLEModeFormat();
         RLEModeFormat(bool isFull, bool isUnique,
                       Datatype rle_elem_type = UInt(16),
+                      bool elide_overflow_check = false,
                       bool includeComments = false,
                       long long allocSize = DEFAULT_ALLOC_SIZE);
 
@@ -79,6 +80,7 @@ namespace taco {
         ir::Stmt storeIntoRle(ir::Expr pos, ir::Expr offset, ir::Expr repeat, ir::Expr valsCapacity, Mode mode) const;
 
         const long long allocSize;
+        const bool elide_overflow_check;
 
         Datatype rle_elem_type;
         uint64_t max_value() const;
