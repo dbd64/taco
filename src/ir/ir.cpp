@@ -894,6 +894,9 @@ Expr GetProperty::make(Expr tensor, TensorProperty property, int mode) {
     case TensorProperty::FillValue:
       gp->name = tensorVar->name + "_fill_value";
       break;
+    case TensorProperty::FillRegion:
+      gp->name = tensorVar->name + "_fill_region";
+      break;
   }
   
   return gp;

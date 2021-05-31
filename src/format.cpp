@@ -9,6 +9,7 @@
 #include "taco/lower/mode_format_dense.h"
 #include "taco/lower/mode_format_compressed.h"
 #include "taco/lower/mode_format_singleton.h"
+#include "taco/lower/mode_format_vb.h"
 
 #include "taco/error.h"
 #include "taco/util/strings.h"
@@ -252,6 +253,11 @@ bool ModeFormat::isZeroless() const {
   return impl->isZeroless;
 }
 
+bool ModeFormat::isLastValueFill() const {
+  taco_iassert(defined());
+  return impl->fill_last_value;
+}
+
 bool ModeFormat::hasCoordValIter() const {
   taco_iassert(defined());
   return impl->hasCoordValIter;
@@ -369,21 +375,29 @@ ModeFormat ModeFormat::Dense(std::make_shared<DenseModeFormat>());
 ModeFormat ModeFormat::Compressed(std::make_shared<CompressedModeFormat>());
 ModeFormat ModeFormat::Sparse = ModeFormat::Compressed;
 ModeFormat ModeFormat::Singleton(std::make_shared<SingletonModeFormat>());
+ModeFormat ModeFormat::RLE(std::make_shared<CompressedModeFormat>(false, true, true, false, true));
+ModeFormat ModeFormat::VB(std::make_shared<VariableBlockModeFormat>(false, true, true, false, false));
 
 ModeFormat ModeFormat::dense = ModeFormat::Dense;
 ModeFormat ModeFormat::compressed = ModeFormat::Compressed;
 ModeFormat ModeFormat::sparse = ModeFormat::Compressed;
 ModeFormat ModeFormat::singleton = ModeFormat::Singleton;
+ModeFormat ModeFormat::rle = ModeFormat::RLE;
+ModeFormat ModeFormat::vb = ModeFormat::VB;
 
 const ModeFormat Dense = ModeFormat::Dense;
 const ModeFormat Compressed = ModeFormat::Compressed;
 const ModeFormat Sparse = ModeFormat::Compressed;
 const ModeFormat Singleton = ModeFormat::Singleton;
+const ModeFormat RLE = ModeFormat::RLE;
+const ModeFormat VB = ModeFormat::VB;
 
 const ModeFormat dense = ModeFormat::Dense;
 const ModeFormat compressed = ModeFormat::Compressed;
 const ModeFormat sparse = ModeFormat::Compressed;
 const ModeFormat singleton = ModeFormat::Singleton;
+const ModeFormat rle = ModeFormat::rle;
+const ModeFormat vb = ModeFormat::vb;
 
 const Format CSR({Dense, Sparse}, {0,1});
 const Format CSC({Dense, Sparse}, {1,0});

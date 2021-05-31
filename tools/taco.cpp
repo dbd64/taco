@@ -686,6 +686,12 @@ int main(int argc, char* argv[]) {
           case 'q':
             modeTypes.push_back(ModeFormat::Singleton);
             break;
+          case 'r':
+            modeTypes.push_back(ModeFormat::RLE);
+            break;
+          case 'v':
+            modeTypes.push_back(ModeFormat::VB);
+            break;
           default:
             return reportError("Incorrect format descriptor", 3);
             break;

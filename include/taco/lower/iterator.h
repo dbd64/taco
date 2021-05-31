@@ -72,6 +72,7 @@ public:
   bool isBranchless() const;
   bool isCompact() const;
   bool isZeroless() const;
+  bool isLastValueFill() const;
 
   /// Capabilities supported by levels being iterated.
   bool hasCoordIter() const;

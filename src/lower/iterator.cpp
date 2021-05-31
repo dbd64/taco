@@ -215,6 +215,12 @@ bool Iterator::isZeroless() const {
   return getMode().defined() && getMode().getModeFormat().isZeroless();
 }
 
+bool Iterator::isLastValueFill() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().isLastValueFill();
+}
+
 bool Iterator::hasCoordIter() const {
   taco_iassert(defined());
   if (isDimensionIterator()) return false;

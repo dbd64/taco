@@ -87,12 +87,16 @@ public:
   static ModeFormat dense;       /// e.g., first mode in CSR
   static ModeFormat compressed;  /// e.g., second mode in CSR
   static ModeFormat singleton;   /// e.g., second mode in COO
+  static ModeFormat rle;         /// e.g., sparse with last value fill
+  static ModeFormat vb;          /// e.g., variable block
 
   static ModeFormat sparse;      /// alias for compressed
   static ModeFormat Dense;       /// alias for dense
   static ModeFormat Compressed;  /// alias for compressed
   static ModeFormat Sparse;      /// alias for compressed
   static ModeFormat Singleton;   /// alias for singleton
+  static ModeFormat RLE;         /// alias for rle
+  static ModeFormat VB;          /// alias for variable block
 
   /// Properties of a mode format
   enum Property {
@@ -129,6 +133,7 @@ public:
   bool isBranchless() const;
   bool isCompact() const;
   bool isZeroless() const;
+  bool isLastValueFill() const;
 
   /// Returns true if a mode format has a specific capability, false otherwise
   bool hasCoordValIter() const;
@@ -188,11 +193,15 @@ extern const ModeFormat Dense;
 extern const ModeFormat Compressed;
 extern const ModeFormat Sparse;
 extern const ModeFormat Singleton;
+extern const ModeFormat RLE;
+extern const ModeFormat VB;
 
 extern const ModeFormat dense;
 extern const ModeFormat compressed;
 extern const ModeFormat sparse;
 extern const ModeFormat singleton;
+extern const ModeFormat rle;
+extern const ModeFormat vb;
 
 extern const Format CSR;
 extern const Format CSC;

@@ -532,6 +532,7 @@ IndexExpr min(IndexExpr, IndexExpr);
 IndexExpr heaviside(IndexExpr, IndexExpr = IndexExpr());
 
 IndexExpr Not(IndexExpr);
+IndexExpr FillVariable(IndexExpr);
 
 
 /// A reduction over the components indexed by the reduction variable.

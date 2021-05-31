@@ -11,7 +11,9 @@ public:
 
   CompressedModeFormat();
   CompressedModeFormat(bool isFull, bool isOrdered,
-                       bool isUnique, bool isZeroless, long long allocSize = DEFAULT_ALLOC_SIZE);
+                       bool isUnique, bool isZeroless,
+                       bool isLastValueFill = false,
+                       long long allocSize = DEFAULT_ALLOC_SIZE);
 
   ~CompressedModeFormat() override {}
 

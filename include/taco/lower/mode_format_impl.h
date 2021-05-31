@@ -108,7 +108,7 @@ public:
                  bool isBranchless, bool isCompact, bool isZeroless, 
                  bool hasCoordValIter, bool hasCoordPosIter, bool hasLocate, 
                  bool hasInsert, bool hasAppend, bool hasSeqInsertEdge, 
-                 bool hasInsertCoord, bool isYieldPosPure);
+                 bool hasInsertCoord, bool isYieldPosPure, bool fill_last_value);
 
   virtual ~ModeFormatImpl();
 
@@ -255,6 +255,7 @@ public:
   const bool hasSeqInsertEdge;
   const bool hasInsertCoord;
   const bool isYieldPosPure;
+  const bool fill_last_value;
 
 protected:
   /// Check if other mode format is identical. Can assume that this method will 

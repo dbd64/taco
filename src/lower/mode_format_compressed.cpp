@@ -10,15 +10,16 @@ using namespace taco::ir;
 namespace taco {
 
 CompressedModeFormat::CompressedModeFormat() : 
-    CompressedModeFormat(false, true, true, false) {
+    CompressedModeFormat(false, true, true, false, false) {
 }
 
 CompressedModeFormat::CompressedModeFormat(bool isFull, bool isOrdered,
-                                           bool isUnique, bool isZeroless, 
+                                           bool isUnique, bool isZeroless,
+                                           bool isLastValueFill,
                                            long long allocSize) :
     ModeFormatImpl("compressed", isFull, isOrdered, isUnique, false, true,
                    isZeroless, false, true, false, false, true, true, true, 
-                   false), 
+                   false, isLastValueFill),
     allocSize(allocSize) {
 }
 

@@ -248,8 +248,11 @@ string CodeGen::unpackTensorProperty(string varname, const GetProperty* op,
     ret << printType(tensor->type, false) << " " << varname << " = ";
     ret << "*((" <<printType(tensor->type, true) << ")(" << tensor->name << "->fill_value));\n";
     return ret.str();
+  } else if (op->property == TensorProperty::FillRegion) {
+    ret << printType(tensor->type, false) << " " << varname << " = ";
+    ret << "((" <<printType(tensor->type, true) << ")(" << tensor->name << "->fill_value));\n";
+    return ret.str();
   }
-
   string tp;
 
   // for a Dense level, nnz is an int

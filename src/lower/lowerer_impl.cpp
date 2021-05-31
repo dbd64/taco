@@ -1787,6 +1787,7 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
 
       // Construct case body
       IndexStmt zeroedStmt = zero(stmt, getExhaustedAccesses(point, loopLattice));
+//      std::cout << zeroedStmt << std::endl;
       Stmt body = lowerForallBody(coordinate, zeroedStmt, {},
                                   inserters, appenders, MergeLattice({point}), reducedAccesses);
       if (coordComparisons.empty()) {
@@ -1795,8 +1796,10 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
         result.push_back(body);
         break;
       }
+//      std::cout << taco::ir::conjunction(coordComparisons) << std::endl << body << std::endl;
       cases.push_back({taco::ir::conjunction(coordComparisons), body});
     }
+//    std::cout << Case::make(cases, loopLattice.exact()) << std::endl;
     result.push_back(Case::make(cases, loopLattice.exact()));
   }
 
@@ -3524,12 +3527,34 @@ Stmt LowererImpl::codeToIncIteratorVars(Expr coordinate, IndexVar coordinateVar,
   for (auto& iterator : levelIterators) {
     Expr ivar = iterator.getIteratorVar();
     if (iterator.isUnique()) {
-      Expr increment = iterator.isFull()
-                     ? 1
-                     : ir::Cast::make(Eq::make(iterator.getCoordVar(),
-                                               coordinate),
-                                      ivar.type());
-      result.push_back(addAssign(ivar, increment));
+      if (iterator.isLastValueFill() && !iterator.isFull()){
+        if(iterator.isLeaf()){
+          auto assign = Assign::make(GetProperty::make(iterator.getTensor(), TensorProperty::FillValue),
+                                     Load::make(GetProperty::make(iterator.getTensor(), TensorProperty::Values),
+                                                ivar));
+
+          auto ifstmt = ir::IfThenElse::make(Eq::make(iterator.getCoordVar(), coordinate),
+                                             Block::make(assign, addAssign(ivar, 1)));
+
+          result.push_back(ifstmt);
+        } else {
+          auto assign = Assign::make(GetProperty::make(iterator.getTensor(), TensorProperty::FillValue),
+                                     Load::make(GetProperty::make(iterator.getTensor(), TensorProperty::Values),
+                                                ivar));
+
+          auto ifstmt = ir::IfThenElse::make(Eq::make(iterator.getCoordVar(), coordinate),
+                                             Block::make(assign, addAssign(ivar, 1)));
+
+          result.push_back(ifstmt);
+        }
+      } else {
+        Expr increment = iterator.isFull()
+                         ? 1
+                         : ir::Cast::make(Eq::make(iterator.getCoordVar(),
+                                                   coordinate),
+                                          ivar.type());
+        result.push_back(addAssign(ivar, increment));
+      }
     } else if (!iterator.isLeaf()) {
       result.push_back(Assign::make(ivar, iterator.getSegendVar()));
     }

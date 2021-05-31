@@ -1580,4 +1580,32 @@ NotIntrinsic::zeroPreservingArgs(const std::vector<IndexExpr>& args) const {
   return {};
 }
 
+// class FillVariableIntrinsic
+
+std::string FillVariableIntrinsic::getName() const {
+  return "FillVariable";
+}
+
+Datatype FillVariableIntrinsic::inferReturnType(const std::vector<Datatype>& argTypes) const {
+  taco_iassert(argTypes.size() == 1);
+  return argTypes[0];
+}
+
+ir::Expr FillVariableIntrinsic::lower(const std::vector<ir::Expr>& args) const {
+  taco_iassert(args.size() == 1);
+  ir::Expr a = args[0];
+  const ir::Load* l;
+  if((l = a.as<ir::Load>()) && l->arr.as<ir::GetProperty>()){
+    a = l->arr.as<ir::GetProperty>()->tensor;
+  } else {
+    taco_not_supported_yet;
+  }
+  return ir::GetProperty::make(a, ir::TensorProperty::FillValue);
+}
+
+std::vector<std::vector<size_t>>
+FillVariableIntrinsic::zeroPreservingArgs(const std::vector<IndexExpr>& args) const {
+  return {};
+}
+
 }

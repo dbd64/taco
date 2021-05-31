@@ -80,6 +80,7 @@ enum class TensorProperty {
   Indices,
   Values,
   FillValue,
+  FillRegion,
   ValuesSize
 };
 

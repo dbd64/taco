@@ -1676,6 +1676,9 @@ IndexExpr Not(IndexExpr a) {
   return CallIntrinsic(std::make_shared<NotIntrinsic>(), {a});
 }
 
+IndexExpr FillVariable(IndexExpr a) {
+  return CallIntrinsic(std::make_shared<FillVariableIntrinsic>(), {a});
+}
 
 // class Reduction
 Reduction::Reduction(const ReductionNode* n) : IndexExpr(n) {
@@ -3327,7 +3330,8 @@ private:
   void visit(const AccessNode* op) {
     if (util::contains(zeroed, op) ||
         util::contains(zeroedVars, op->tensorVar)) {
-      expr = IndexExpr();
+      expr = FillVariable(op);
+//      expr = op->tensorVar.getFill();
     }
     else {
       expr = op;
