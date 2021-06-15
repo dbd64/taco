@@ -54,6 +54,8 @@ struct TensorStorage::Content {
         modeTypes[i] = taco_mode_sparse;
       } else if (modeType.getName() == VB.getName()) {
         modeTypes[i] = taco_mode_sparse;
+      } else if (modeType.getName() == LZ77.getName()) {
+        modeTypes[i] = taco_mode_sparse;
       } else {
         taco_not_supported_yet;
       }
@@ -180,6 +182,19 @@ TensorStorage::operator struct taco_tensor_t*() const {
         tensorData->indices[i][1] = (uint8_t*)idx.getData();
         tensorData->indices[i][2] = (uint8_t*)szpos.getData();
         tensorData->indices[i][3] = (uint8_t*)sz.getData();
+      }
+    }
+    else if (modeType.getName() == LZ77.getName()) {
+      // TODO Uncomment assert and remove conditional
+      // taco_iassert(modeIndex.numIndexArrays() == 2)
+      //     << modeIndex.numIndexArrays();
+      if (modeIndex.numIndexArrays() > 0) {
+        const Array& runs = modeIndex.getIndexArray(2);
+        const Array& dist = modeIndex.getIndexArray(1);
+        const Array& pos = modeIndex.getIndexArray(0);
+        tensorData->indices[i][0] = (uint8_t*)pos.getData();
+        tensorData->indices[i][1] = (uint8_t*)dist.getData();
+        tensorData->indices[i][2] = (uint8_t*)runs.getData();
       }
     }
     else {

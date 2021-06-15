@@ -108,7 +108,8 @@ public:
                  bool isBranchless, bool isCompact, bool isZeroless, 
                  bool hasCoordValIter, bool hasCoordPosIter, bool hasLocate, 
                  bool hasInsert, bool hasAppend, bool hasSeqInsertEdge, 
-                 bool hasInsertCoord, bool isYieldPosPure, bool fill_last_value);
+                 bool hasInsertCoord, bool isYieldPosPure, bool updatesFillRegion,
+                 bool fill_last_value);
 
   virtual ~ModeFormatImpl();
 
@@ -231,6 +232,14 @@ public:
   getFinalizeYieldPos(ir::Expr prevSize, Mode mode) const;
   /// @}
 
+  /// Level functions that implement position based fill updater capability.
+  /// @{
+  virtual ModeFunction
+  getFillRegion(ir::Expr pos,
+                std::vector<ir::Expr> coords,
+                Mode mode) const;
+  /// @}
+
   /// Returns arrays associated with a tensor mode
   virtual std::vector<ir::Expr>
   getArrays(ir::Expr tensor, int mode, int level) const = 0;
@@ -255,6 +264,7 @@ public:
   const bool hasSeqInsertEdge;
   const bool hasInsertCoord;
   const bool isYieldPosPure;
+  const bool updatesFillRegion;
   const bool fill_last_value;
 
 protected:

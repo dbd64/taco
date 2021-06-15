@@ -419,6 +419,12 @@ Stmt Iterator::getFinalizeYieldPos(const Expr& prevSize) const {
                                                              getMode());
 }
 
+ModeFunction Iterator::getFillRegion(const ir::Expr& pos, const std::vector<ir::Expr>& coords) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getFillRegion(pos, coords, getMode());
+}
+
+
 bool Iterator::defined() const {
   return content != nullptr;
 }

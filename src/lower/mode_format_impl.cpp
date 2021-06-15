@@ -145,19 +145,21 @@ std::ostream& operator<<(std::ostream& os, const ModeFunction& modeFunction) {
 
 
 // class ModeTypeImpl
-ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull, 
+ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull,
                                bool isOrdered, bool isUnique, bool isBranchless, 
                                bool isCompact, bool isZeroless, 
                                bool hasCoordValIter, bool hasCoordPosIter, 
                                bool hasLocate, bool hasInsert, bool hasAppend, 
                                bool hasSeqInsertEdge, bool hasInsertCoord,
-                               bool isYieldPosPure, bool fill_last_value) :
+                               bool isYieldPosPure, bool updatesFillRegion,
+                               bool fill_last_value) :
     name(name), isFull(isFull), isOrdered(isOrdered), isUnique(isUnique),
     isBranchless(isBranchless), isCompact(isCompact), isZeroless(isZeroless),
     hasCoordValIter(hasCoordValIter), hasCoordPosIter(hasCoordPosIter),
     hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend),
     hasSeqInsertEdge(hasSeqInsertEdge), hasInsertCoord(hasInsertCoord),
-    isYieldPosPure(isYieldPosPure), fill_last_value(fill_last_value) {
+    isYieldPosPure(isYieldPosPure), updatesFillRegion(updatesFillRegion),
+    fill_last_value(fill_last_value) {
 }
 
 ModeFormatImpl::~ModeFormatImpl() {
@@ -290,6 +292,11 @@ Stmt ModeFormatImpl::getInsertCoord(Expr parentPos, Expr pos,
 
 Stmt ModeFormatImpl::getFinalizeYieldPos(Expr prevSize, Mode mode) const {
   return Stmt();
+}
+
+ModeFunction
+ModeFormatImpl::getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords, Mode mode) const {
+  return ModeFunction();
 }
 
 bool ModeFormatImpl::equals(const ModeFormatImpl& other) const {

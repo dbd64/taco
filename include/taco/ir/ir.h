@@ -512,9 +512,10 @@ struct Call : public ExprNode<Call> {
 struct Load : public ExprNode<Load> {
   Expr arr;
   Expr loc;
+  bool isAddrOf;
 
   static Expr make(Expr arr);
-  static Expr make(Expr arr, Expr loc);
+  static Expr make(Expr arr, Expr loc, bool isAddressOf = false);
 
   static const IRNodeType _type_info = IRNodeType::Load;
 };

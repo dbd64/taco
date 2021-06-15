@@ -1,2 +1,3 @@
 add_subdirectory(tensor_times_vector)
 add_subdirectory(vb_example)
+add_subdirectory(lz77)

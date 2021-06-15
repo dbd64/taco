@@ -10,6 +10,7 @@
 #include "taco/lower/mode_format_compressed.h"
 #include "taco/lower/mode_format_singleton.h"
 #include "taco/lower/mode_format_vb.h"
+#include "taco/lower/mode_format_lz77.h"
 
 #include "taco/error.h"
 #include "taco/util/strings.h"
@@ -298,6 +299,11 @@ bool ModeFormat::isYieldPosPure() const {
   return impl->isYieldPosPure;
 }
 
+bool ModeFormat::updatesFillRegion() const {
+  taco_iassert(defined());
+  return impl->updatesFillRegion;
+}
+
 std::vector<AttrQuery> ModeFormat::getAttrQueries(
     std::vector<IndexVar> parentCoords, 
     std::vector<IndexVar> childCoords) const {
@@ -377,6 +383,7 @@ ModeFormat ModeFormat::Sparse = ModeFormat::Compressed;
 ModeFormat ModeFormat::Singleton(std::make_shared<SingletonModeFormat>());
 ModeFormat ModeFormat::RLE(std::make_shared<CompressedModeFormat>(false, true, true, false, true));
 ModeFormat ModeFormat::VB(std::make_shared<VariableBlockModeFormat>(false, true, true, false, false));
+ModeFormat ModeFormat::LZ77(std::make_shared<LZ77ModeFormat>());
 
 ModeFormat ModeFormat::dense = ModeFormat::Dense;
 ModeFormat ModeFormat::compressed = ModeFormat::Compressed;
@@ -384,6 +391,7 @@ ModeFormat ModeFormat::sparse = ModeFormat::Compressed;
 ModeFormat ModeFormat::singleton = ModeFormat::Singleton;
 ModeFormat ModeFormat::rle = ModeFormat::RLE;
 ModeFormat ModeFormat::vb = ModeFormat::VB;
+ModeFormat ModeFormat::lz77 = ModeFormat::LZ77;
 
 const ModeFormat Dense = ModeFormat::Dense;
 const ModeFormat Compressed = ModeFormat::Compressed;
@@ -391,6 +399,7 @@ const ModeFormat Sparse = ModeFormat::Compressed;
 const ModeFormat Singleton = ModeFormat::Singleton;
 const ModeFormat RLE = ModeFormat::RLE;
 const ModeFormat VB = ModeFormat::VB;
+const ModeFormat LZ77 = ModeFormat::LZ77;
 
 const ModeFormat dense = ModeFormat::Dense;
 const ModeFormat compressed = ModeFormat::Compressed;

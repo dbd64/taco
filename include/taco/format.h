@@ -89,6 +89,7 @@ public:
   static ModeFormat singleton;   /// e.g., second mode in COO
   static ModeFormat rle;         /// e.g., sparse with last value fill
   static ModeFormat vb;          /// e.g., variable block
+  static ModeFormat lz77;          /// e.g., variable block
 
   static ModeFormat sparse;      /// alias for compressed
   static ModeFormat Dense;       /// alias for dense
@@ -97,6 +98,7 @@ public:
   static ModeFormat Singleton;   /// alias for singleton
   static ModeFormat RLE;         /// alias for rle
   static ModeFormat VB;          /// alias for variable block
+  static ModeFormat LZ77;          /// alias for variable block
 
   /// Properties of a mode format
   enum Property {
@@ -148,6 +150,9 @@ public:
   bool hasInsertCoord() const;
   bool isYieldPosPure() const;
 
+  /// TODO
+  bool updatesFillRegion() const;
+
   std::vector<AttrQuery> getAttrQueries(
       std::vector<IndexVar> parentCoords, 
       std::vector<IndexVar> childCoords) const;
@@ -195,6 +200,7 @@ extern const ModeFormat Sparse;
 extern const ModeFormat Singleton;
 extern const ModeFormat RLE;
 extern const ModeFormat VB;
+extern const ModeFormat LZ77;
 
 extern const ModeFormat dense;
 extern const ModeFormat compressed;

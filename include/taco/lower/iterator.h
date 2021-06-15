@@ -183,7 +183,12 @@ public:
       const std::vector<ir::Expr>& coords) const;
   ir::Stmt getFinalizeYieldPos(const ir::Expr& prevSize) const;
 
-  /// Returns true if the iterator is defined, false otherwise.
+  /// TODO
+  ModeFunction getFillRegion(const ir::Expr& pos,
+                         const std::vector<ir::Expr>& coords) const;
+
+
+    /// Returns true if the iterator is defined, false otherwise.
   bool defined() const;
 
   /// Methods for querying and operating on windowed tensor modes.

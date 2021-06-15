@@ -71,6 +71,15 @@ private:
 LowererImpl::LowererImpl() : visitor(new Visitor(this)) {
 }
 
+static void createFillRegionVars(const map<TensorVar, Expr>& tensorVars,
+                               map<Expr, vector<Expr>>* fillRegionVars) {
+  for (auto& tensorVar : tensorVars) {
+    Expr tensor = tensorVar.second;
+    Expr fillRegionLength = Var::make(util::toString(tensor) + "_fill_len", Int());
+    Expr fillRegionIndex = Var::make(util::toString(tensor) + "_fill_index", Int());
+    fillRegionVars->insert({tensor, {fillRegionLength, fillRegionIndex}});
+  }
+}
 
 static void createCapacityVars(const map<TensorVar, Expr>& tensorVars,
                                map<Expr, Expr>* capacityVars) {
@@ -279,6 +288,9 @@ LowererImpl::lower(IndexStmt stmt, string name,
 
   // Create variables for keeping track of result values array capacity
   createCapacityVars(resultVars, &capacityVars);
+
+  // Create variables used for iterating and keeping track of fill regions
+  createFillRegionVars(tensorVars, &fillRegionVars);
 
   // Create iterators
   iterators = Iterators(stmt, tensorVars);
@@ -1661,6 +1673,9 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
   Stmt caseStmts = lowerMergeCases(coordinate, coordinateVar, statement, pointLattice,
                                    reducedAccesses);
 
+  // TODO
+  Stmt updateFillRegions = codeToUpdateFills(coordinate, coordinateVar, iterators, mergers);
+
   // Increment iterator position variables
   Stmt incIteratorVarStmts = codeToIncIteratorVars(coordinate, coordinateVar, iterators, mergers);
 
@@ -1672,6 +1687,7 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
                                  loadLocatorPosVars,
                                  deduplicationLoops,
                                  caseStmts,
+                                 updateFillRegions,
                                  incIteratorVarStmts));
 }
 
@@ -2839,6 +2855,10 @@ Expr LowererImpl::getCapacityVar(Expr tensor) const {
   return this->capacityVars.at(tensor);
 }
 
+vector<Expr> LowererImpl::getFillRegionVars(Expr tensor) const {
+  taco_iassert(util::contains(this->fillRegionVars, tensor)) << tensor;
+  return this->fillRegionVars.at(tensor);
+}
 
 ir::Expr LowererImpl::getValuesArray(TensorVar var) const
 {
@@ -2920,16 +2940,24 @@ vector<Expr> LowererImpl::coordinates(vector<Iterator> iterators)
 Stmt LowererImpl::initResultArrays(vector<Access> writes,
                                    vector<Access> reads,
                                    set<Access> reducedAccesses) {
+
+  std::vector<Stmt> result;
+
   multimap<IndexVar, Iterator> readIterators;
   for (auto& read : reads) {
     for (auto& readIterator : getIterators(read)) {
       for (auto& underivedAncestor : provGraph.getUnderivedAncestors(readIterator.getIndexVar())) {
         readIterators.insert({underivedAncestor, readIterator});
       }
+
+      vector<Expr> fillVars = getFillRegionVars(readIterator.getTensor());
+      Expr lenVar = fillVars[0];
+      Expr indexVar = fillVars[1];
+      result.push_back(VarDecl::make(lenVar, 1));
+      result.push_back(VarDecl::make(indexVar, 0));
     }
   }
 
-  std::vector<Stmt> result;
   for (auto& write : writes) {
     if (write.getTensorVar().getOrder() == 0 ||
         isAssembledByUngroupedInsertion(write.getTensorVar())) {
@@ -3029,6 +3057,14 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
       // full iterator from our set of iterators.
       Expr size = generateAssembleCode() ? getCapacityVar(tensor) : parentSize;
       result.push_back(initValues(tensor, fill, 0, size));
+    }
+
+    for (const auto& iterator : iterators) {
+      vector<Expr> fillVars = getFillRegionVars(iterator.getTensor());
+      Expr lenVar = fillVars[0];
+      Expr indexVar = fillVars[1];
+      result.push_back(VarDecl::make(lenVar, 1));
+      result.push_back(VarDecl::make(indexVar, 0));
     }
   }
   return result.empty() ? Stmt() : Block::blanks(result);
@@ -3574,6 +3610,50 @@ Stmt LowererImpl::codeToIncIteratorVars(Expr coordinate, IndexVar coordinateVar,
       taco_iassert(stmt != Stmt());
       result.push_back(stmt);
       result.push_back(codeToRecoverDerivedIndexVar(coordinateVar, iterator.getIndexVar(), false));
+    }
+  }
+
+  return Block::make(result);
+}
+
+Stmt LowererImpl::codeToUpdateFills(Expr coordinate, IndexVar coordinateVar, vector<Iterator> iterators, vector<Iterator> mergers) {
+  vector<Stmt> result;
+
+
+  for (auto& iterator : iterators) {
+    if(iterator.getMode().defined() && iterator.getMode().getModeFormat().defined() &&
+       iterator.getMode().getModeFormat().updatesFillRegion()){
+      auto f = iterator.getFillRegion(iterator.getPosVar(), coordinates(iterator));
+      auto coord = iterator.posAccess(iterator.getPosVar(), coordinates(iterator))[0];
+
+      result.push_back(f.compute());
+
+      auto r = f.getResults();
+      taco_uassert(r.size() == 4);
+
+      auto start = r[0];
+      auto length = r[1];
+      auto run = r[2];
+      auto updateFill = ir::And::make(r[3], ir::Eq::make(coord, coordinate));
+
+      auto fillRegion = GetProperty::make(iterator.getTensor(), TensorProperty::FillRegion);
+      auto values = GetProperty::make(iterator.getTensor(), TensorProperty::Values);
+
+      auto fillVars = getFillRegionVars(iterator.getTensor());
+      auto lengthVar = fillVars[0];
+      auto indexVar = fillVars[1];
+
+      auto body = Block::make(
+              Assign::make(lengthVar, length),
+              Assign::make(indexVar, 0),
+              Assign::make(fillRegion, Load::make(values, start, true))
+              );
+      result.push_back(IfThenElse::make(updateFill, body));
+
+      // We must also update the fill variable from the fill region
+      auto fillVariable = GetProperty::make(iterator.getTensor(), TensorProperty::FillValue);
+      result.push_back(Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
+      result.push_back(Assign::make(indexVar, ir::Rem::make(ir::Add::make(indexVar, 1), lengthVar)));
     }
   }
 

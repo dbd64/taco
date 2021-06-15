@@ -257,6 +257,9 @@ protected:
   /// Retrieves a result values array capacity variable.
   ir::Expr getCapacityVar(ir::Expr) const;
 
+  /// TODO
+  std::vector<ir::Expr> getFillRegionVars(ir::Expr tensor) const;
+
   /// Retrieve the values array of the tensor var.
   ir::Expr getValuesArray(TensorVar) const;
 
@@ -377,6 +380,9 @@ protected:
   /// Conditionally increment iterator position variables.
   ir::Stmt codeToIncIteratorVars(ir::Expr coordinate, IndexVar coordinateVar,
           std::vector<Iterator> iterators, std::vector<Iterator> mergers);
+
+  ir::Stmt codeToUpdateFills(ir::Expr coordinate, IndexVar coordinateVar,
+                             std::vector<Iterator> iterators, std::vector<Iterator> mergers);
 
   ir::Stmt codeToLoadCoordinatesFromPosIterators(std::vector<Iterator> iterators, bool declVars);
 
@@ -580,6 +586,9 @@ private:
   class Visitor;
   friend class Visitor;
   std::shared_ptr<Visitor> visitor;
+
+  /// Variables for iterating over and storing fill region information
+  std::map<ir::Expr, std::vector<ir::Expr>> fillRegionVars;
 
 };
 

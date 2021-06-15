@@ -1597,6 +1597,8 @@ ir::Expr FillVariableIntrinsic::lower(const std::vector<ir::Expr>& args) const {
   const ir::Load* l;
   if((l = a.as<ir::Load>()) && l->arr.as<ir::GetProperty>()){
     a = l->arr.as<ir::GetProperty>()->tensor;
+  } else if (auto gp = a.as<ir::GetProperty>()) {
+    a = gp->tensor;
   } else {
     taco_not_supported_yet;
   }

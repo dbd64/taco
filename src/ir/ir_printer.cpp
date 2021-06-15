@@ -349,6 +349,7 @@ void IRPrinter::visit(const Switch* op) {
 }
 
 void IRPrinter::visit(const Load* op) {
+  if (op->isAddrOf) stream << "&";
   parentPrecedence = Precedence::LOAD;
   op->arr.accept(this);
   stream << "[";

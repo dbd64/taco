@@ -692,6 +692,9 @@ int main(int argc, char* argv[]) {
           case 'v':
             modeTypes.push_back(ModeFormat::VB);
             break;
+          case 'l':
+            modeTypes.push_back(ModeFormat::LZ77);
+            break;
           default:
             return reportError("Incorrect format descriptor", 3);
             break;
