@@ -18,7 +18,7 @@ SingletonModeFormat::SingletonModeFormat(bool isFull, bool isOrdered,
                                          long long allocSize) :
     ModeFormatImpl("singleton", isFull, isOrdered, isUnique, true, true,
                    isZeroless, false, true, false, false, true, false, true, 
-                   true, false, false),
+                   true, false, false, false),
     allocSize(allocSize) {
 }
 

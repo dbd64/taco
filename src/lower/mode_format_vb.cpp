@@ -20,7 +20,8 @@ namespace taco {
             ModeFormatImpl("variableblock", isFull, isOrdered, isUnique, false, true,
                            isZeroless, false, true, false, false,
                            true, false, false,
-                           false, false, isLastValueFill),
+                           false, false, false,
+                           isLastValueFill),
             allocSize(allocSize) {
     }
 
@@ -89,6 +90,7 @@ namespace taco {
     ModeFunction VariableBlockModeFormat::coordBounds(Expr parentPos,
                                                    Mode mode) const {
       taco_not_supported_yet;
+      return ModeFunction();
 //      Expr pend = Load::make(getPosArray(mode.getModePack()),
 //                             ir::Add::make(parentPos, 1));
 //      Expr coordend = Load::make(getCoordArray(mode.getModePack()), ir::Sub::make(pend, 1));

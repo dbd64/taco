@@ -28,6 +28,19 @@ namespace taco {
 
         ir::Expr getWidth(Mode mode) const override;
 
+        ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord,
+                                Mode mode) const override;
+        ir::Stmt getAppendEdges(ir::Expr parentPos, ir::Expr posBegin,
+                                ir::Expr posEnd, Mode mode) const override;
+        ir::Expr getSize(ir::Expr parentSize, Mode mode) const override;
+        ir::Stmt getAppendInitEdges(ir::Expr parentPosBegin,
+                                    ir::Expr parentPosEnd, Mode mode) const override;
+        ir::Stmt getAppendInitLevel(ir::Expr parentSize, ir::Expr size,
+                                    Mode mode) const override;
+        ir::Stmt getAppendFinalizeLevel(ir::Expr parentSize, ir::Expr size,
+                                        Mode mode) const override;
+
+
         ModeFunction getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords,
                                    Mode mode) const override;
 
@@ -38,6 +51,10 @@ namespace taco {
 
         ir::Expr getCoordVar(Mode mode) const;
         ir::Expr getPosCoordVar(Mode mode) const;
+
+        ir::Expr getPosCapacity(Mode mode) const;
+        ir::Expr getDistCapacity(Mode mode) const;
+        ir::Expr getRunCapacity(Mode mode) const;
 
         bool equals(const ModeFormatImpl& other) const override;
 

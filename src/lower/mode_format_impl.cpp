@@ -152,14 +152,14 @@ ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull,
                                bool hasLocate, bool hasInsert, bool hasAppend, 
                                bool hasSeqInsertEdge, bool hasInsertCoord,
                                bool isYieldPosPure, bool updatesFillRegion,
-                               bool fill_last_value) :
+                               bool hasAppendFillRegion, bool fill_last_value) :
     name(name), isFull(isFull), isOrdered(isOrdered), isUnique(isUnique),
     isBranchless(isBranchless), isCompact(isCompact), isZeroless(isZeroless),
     hasCoordValIter(hasCoordValIter), hasCoordPosIter(hasCoordPosIter),
     hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend),
     hasSeqInsertEdge(hasSeqInsertEdge), hasInsertCoord(hasInsertCoord),
     isYieldPosPure(isYieldPosPure), updatesFillRegion(updatesFillRegion),
-    fill_last_value(fill_last_value) {
+    hasAppendFillRegion(hasAppendFillRegion), fill_last_value(fill_last_value) {
 }
 
 ModeFormatImpl::~ModeFormatImpl() {

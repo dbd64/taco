@@ -291,6 +291,13 @@ static size_t unpackTensorData(const taco_tensor_t& tensorData,
     } else if (modeType.getName() == Singleton.getName()) {
       Array idx = Array(type<int>(), tensorData.indices[i][1], numVals, Array::UserOwns);
       modeIndices.push_back(ModeIndex({makeArray(type<int>(), 0), idx}));
+    } else if (modeType.getName() == LZ77.getName()) {
+      auto size = ((int*)tensorData.indices[i][0])[numVals];
+      Array pos = Array(type<int>(), tensorData.indices[i][0], numVals+1, Array::UserOwns);
+      Array dist = Array(type<int>(), tensorData.indices[i][1], size, Array::UserOwns);
+      Array run = Array(type<int>(), tensorData.indices[i][2], size, Array::UserOwns);
+      modeIndices.push_back(ModeIndex({pos,dist,run}));
+      numVals = size;
     } else {
       taco_not_supported_yet;
     }

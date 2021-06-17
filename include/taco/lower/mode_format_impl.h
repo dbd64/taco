@@ -109,7 +109,7 @@ public:
                  bool hasCoordValIter, bool hasCoordPosIter, bool hasLocate, 
                  bool hasInsert, bool hasAppend, bool hasSeqInsertEdge, 
                  bool hasInsertCoord, bool isYieldPosPure, bool updatesFillRegion,
-                 bool fill_last_value);
+                 bool hasAppendFillRegion, bool fill_last_value);
 
   virtual ~ModeFormatImpl();
 
@@ -265,6 +265,7 @@ public:
   const bool hasInsertCoord;
   const bool isYieldPosPure;
   const bool updatesFillRegion;
+  const bool hasAppendFillRegion;
   const bool fill_last_value;
 
 protected:

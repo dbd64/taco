@@ -47,11 +47,18 @@ Tensor<double> lz77_2(std::string name) {
 int main(int argc, char* argv[]) {
   Format  dv({Dense});
   Format  LZ77f({LZ77});
+  IndexVar i("i");
 
-  Tensor<double> A("A", {11},   dv, 0);
+
+  Tensor<double> A("A", {11},   LZ77f, 0);
   Tensor<double> B = lz77_1("B");
   Tensor<double> C = lz77_2("C");
   Tensor<double> D("D", {11},   dv, 0);
+  Tensor<double> B_("dB", {11},   dv, 0);
+  Tensor<double> C_("dC", {11},   dv, 0);
+
+  B_(i) = B(i) + D(i);
+  C_(i) = C(i) + D(i);
 
   auto opFunc = [](const std::vector<ir::Expr>& v) {
     return ir::Add::make(v[0], v[1]);
@@ -65,11 +72,14 @@ int main(int argc, char* argv[]) {
   Func plus_("plus_", opFunc, algFunc);
 
   std::cout << B << std::endl;
-  std::cout << C << std::endl;
+  std::cout << B_ << std::endl;
 
-  IndexVar i("i");
+  std::cout << C << std::endl;
+  std::cout << C_ << std::endl;
+
   A(i) = plus_(B(i), C(i));
 
+  A.setAssembleWhileCompute(true);
   A.compile();
   A.printComputeIR(std::cout);
   A.assemble();

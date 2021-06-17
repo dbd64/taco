@@ -22,7 +22,8 @@ namespace taco {
                                    long long allocSize) :
             ModeFormatImpl("lz77", isFull, isOrdered, isUnique, false, true,
                            isZeroless, false, true, false, false,
-                           true, false, false, false, true, false),
+                           true, false, false, false, true,
+                           true, false),
             allocSize(allocSize) {
     }
 
@@ -136,6 +137,111 @@ namespace taco {
       return ModeFunction(blk, {startPos, length, run, updateFill});
     }
 
+    Stmt LZ77ModeFormat::getAppendCoord(Expr p, Expr i, Mode mode) const {
+      taco_iassert(mode.getPackLocation() == 0);
+      Expr distArray = getDistArray(mode.getModePack());
+      Expr runArray = getRunArray(mode.getModePack());
+      Expr stride = (int)mode.getModePack().getNumModes();
+      Expr idx = ir::Mul::make(p, stride);
+
+
+      Stmt maybeResizeDist = doubleSizeIfFull(distArray, getDistCapacity(mode), p);
+      Stmt maybeResizeRun = doubleSizeIfFull(runArray, getRunCapacity(mode), p);
+
+
+      return Block::make( maybeResizeDist, maybeResizeRun,
+              Store::make(distArray, idx, 0),
+              Store::make(runArray, idx, 0));
+    }
+
+    Stmt LZ77ModeFormat::getAppendEdges(Expr pPrev, Expr pBegin, Expr pEnd,
+                                              Mode mode) const {
+      Expr posArray = getPosArray(mode.getModePack());
+      ModeFormat parentModeType = mode.getParentModeType();
+      Expr edges = (!parentModeType.defined() || parentModeType.hasAppend())
+                   ? pEnd : ir::Sub::make(pEnd, pBegin);
+      return Store::make(posArray, ir::Add::make(pPrev, 1), edges);
+    }
+
+    Expr LZ77ModeFormat::getSize(ir::Expr szPrev, Mode mode) const {
+      return Load::make(getPosArray(mode.getModePack()), szPrev);
+    }
+
+    Stmt LZ77ModeFormat::getAppendInitEdges(Expr pPrevBegin,
+                                                  Expr pPrevEnd, Mode mode) const {
+      if (isa<ir::Literal>(pPrevBegin)) {
+        taco_iassert(to<ir::Literal>(pPrevBegin)->equalsScalar(0));
+        return Stmt();
+      }
+
+      Expr posArray = getPosArray(mode.getModePack());
+      Expr posCapacity = getPosCapacity(mode);
+      ModeFormat parentModeType = mode.getParentModeType();
+      if (!parentModeType.defined() || parentModeType.hasAppend()) {
+        return doubleSizeIfFull(posArray, posCapacity, pPrevEnd);
+      }
+
+      Expr pVar = Var::make("p" + mode.getName(), Int());
+      Expr lb = ir::Add::make(pPrevBegin, 1);
+      Expr ub = ir::Add::make(pPrevEnd, 1);
+      Stmt initPos = For::make(pVar, lb, ub, 1, Store::make(posArray, pVar, 0));
+      Stmt maybeResizePos = atLeastDoubleSizeIfFull(posArray, posCapacity, pPrevEnd);
+      return Block::make({maybeResizePos, initPos});
+    }
+
+    Stmt LZ77ModeFormat::getAppendInitLevel(Expr szPrev, Expr sz,
+                                                  Mode mode) const {
+      const bool szPrevIsZero = isa<ir::Literal>(szPrev) &&
+                                to<ir::Literal>(szPrev)->equalsScalar(0);
+
+      Expr defaultCapacity = ir::Literal::make(allocSize, Datatype::Int32);
+      Expr posArray = getPosArray(mode.getModePack());
+      Expr initCapacity = szPrevIsZero ? defaultCapacity : ir::Add::make(szPrev, 1);
+      Expr posCapacity = initCapacity;
+
+      std::vector<Stmt> initStmts;
+      if (szPrevIsZero) {
+        posCapacity = getPosCapacity(mode);
+        initStmts.push_back(VarDecl::make(posCapacity, initCapacity));
+      }
+      initStmts.push_back(Allocate::make(posArray, posCapacity));
+      initStmts.push_back(Store::make(posArray, 0, 0));
+
+      if (mode.getParentModeType().defined() &&
+          !mode.getParentModeType().hasAppend() && !szPrevIsZero) {
+        Expr pVar = Var::make("p" + mode.getName(), Int());
+        Stmt storePos = Store::make(posArray, pVar, 0);
+        initStmts.push_back(For::make(pVar, 1, initCapacity, 1, storePos));
+      }
+
+      initStmts.push_back(Allocate::make(getDistArray(mode.getModePack()), 100));
+      initStmts.push_back(Allocate::make(getRunArray(mode.getModePack()), 100));
+      initStmts.push_back(VarDecl::make(getDistCapacity(mode), 100));
+      initStmts.push_back(VarDecl::make(getRunCapacity(mode), 100));
+
+      return Block::make(initStmts);
+    }
+
+    Stmt LZ77ModeFormat::getAppendFinalizeLevel(Expr szPrev,
+                                                      Expr sz, Mode mode) const {
+      ModeFormat parentModeType = mode.getParentModeType();
+      if ((isa<ir::Literal>(szPrev) && to<ir::Literal>(szPrev)->equalsScalar(1)) ||
+          !parentModeType.defined() || parentModeType.hasAppend()) {
+        return Stmt();
+      }
+
+      Expr csVar = Var::make("cs" + mode.getName(), Int());
+      Stmt initCs = VarDecl::make(csVar, 0);
+
+      Expr pVar = Var::make("p" + mode.getName(), Int());
+      Expr loadPos = Load::make(getPosArray(mode.getModePack()), pVar);
+      Stmt incCs = Assign::make(csVar, ir::Add::make(csVar, loadPos));
+      Stmt updatePos = Store::make(getPosArray(mode.getModePack()), pVar, csVar);
+      Stmt body = Block::make({incCs, updatePos});
+      Stmt finalizeLoop = For::make(pVar, 1, ir::Add::make(szPrev, 1), 1, body);
+
+      return Block::make({initCs, finalizeLoop});
+    }
 
     vector<Expr> LZ77ModeFormat::getArrays(Expr tensor, int mode,
                                                     int level) const {
@@ -185,6 +291,41 @@ namespace taco {
       return mode.getVar(varName);
     }
 
+    Expr LZ77ModeFormat::getPosCapacity(Mode mode) const {
+      const std::string varName = mode.getName() + "_pos_capacity";
+
+      if (!mode.hasVar(varName)) {
+        Expr posCapacity = Var::make(varName, Int());
+        mode.addVar(varName, posCapacity);
+        return posCapacity;
+      }
+
+      return mode.getVar(varName);
+    }
+
+    Expr LZ77ModeFormat::getRunCapacity(Mode mode) const {
+      const std::string varName = mode.getName() + "_run_capacity";
+
+      if (!mode.hasVar(varName)) {
+        Expr posCapacity = Var::make(varName, Int());
+        mode.addVar(varName, posCapacity);
+        return posCapacity;
+      }
+
+      return mode.getVar(varName);
+    }
+
+    Expr LZ77ModeFormat::getDistCapacity(Mode mode) const {
+      const std::string varName = mode.getName() + "_dist_capacity";
+
+      if (!mode.hasVar(varName)) {
+        Expr posCapacity = Var::make(varName, Int());
+        mode.addVar(varName, posCapacity);
+        return posCapacity;
+      }
+
+      return mode.getVar(varName);
+    }
 
     Expr LZ77ModeFormat::getWidth(Mode mode) const {
       return ir::Literal::make(allocSize, Datatype::Int32);
