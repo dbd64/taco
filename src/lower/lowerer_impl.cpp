@@ -1755,6 +1755,38 @@ Stmt LowererImpl::resolveCoordinate(std::vector<Iterator> mergers, ir::Expr coor
   }
 }
 
+class AllFillsVisitor : public IndexNotationVisitor {
+
+public:
+    AllFillsVisitor() {}
+
+    std::pair<bool, std::vector<TensorVar>> check(const IndexStmt& expr) {
+      expr.accept(this);
+      return {allFills, tensorFills};
+    }
+
+private:
+    bool allFills = true;
+    std::vector<TensorVar> tensorFills;
+
+    using IndexNotationVisitor::visit;
+    void visit(const AccessNode* node) {
+      allFills = false;
+      IndexNotationVisitor::visit(node);
+    }
+
+    void visit(const CallIntrinsicNode* node){
+      if(node->func->getName() == "FillVariable"){
+        auto arg = node->args[0];
+        taco_iassert(isa<Access>(arg));
+        auto tensorVar = to<Access>(arg).getTensorVar();
+        tensorFills.push_back(tensorVar);
+        return;
+      }
+      IndexNotationVisitor::visit(node);
+    }
+};
+
 Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, IndexStmt stmt,
                                   MergeLattice caseLattice,
                                   const std::set<Access>& reducedAccesses)
@@ -1783,6 +1815,15 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
     result.push_back(body);
   }
   else if (!loopLattice.points().empty()) {
+    // TODO: HACK
+    vector<Expr> coordVars;
+    for (Iterator iterator : loopLattice.points()[0].rangers()) {
+      if (!(provGraph.isCoordVariable(iterator.getIndexVar()) &&
+            provGraph.isDerivedFrom(iterator.getIndexVar(), coordinateVar))) {
+        coordVars.push_back(iterator.getCoordVar());
+      }
+    }
+
     vector<pair<Expr,Stmt>> cases;
     for (MergePoint point : loopLattice.points()) {
 
@@ -1806,6 +1847,28 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
 //      std::cout << zeroedStmt << std::endl;
       Stmt body = lowerForallBody(coordinate, zeroedStmt, {},
                                   inserters, appenders, MergeLattice({point}), reducedAccesses);
+
+      auto fillsResult = AllFillsVisitor().check(zeroedStmt);
+      if (fillsResult.first){
+        vector<Stmt> whileBodyStmts;
+        whileBodyStmts.push_back(body);
+        for (auto& tensorVar : fillsResult.second){
+          auto fillVars = getFillRegionVars(getTensorVar(tensorVar));
+          auto lengthVar = fillVars[0];
+          auto indexVar = fillVars[1];
+          auto fillRegion = GetProperty::make(getTensorVar(tensorVar), TensorProperty::FillRegion);
+          auto fillVariable = GetProperty::make(getTensorVar(tensorVar), TensorProperty::FillValue);
+
+          whileBodyStmts.push_back(Assign::make(indexVar, ir::Rem::make(ir::Add::make(indexVar, 1), lengthVar)));
+          whileBodyStmts.push_back(Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
+
+        }
+        whileBodyStmts.push_back(addAssign(coordinate,1));
+        auto cond = Lt::make(coordinate, Min::make(coordVars));
+        auto whileBody = Block::make(whileBodyStmts);
+        body = While::make(cond, whileBody);
+      }
+
       if (coordComparisons.empty()) {
         Stmt body = lowerForallBody(coordinate, stmt, {}, inserters,
                                     appenders, MergeLattice({point}), reducedAccesses);
