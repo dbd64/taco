@@ -65,6 +65,12 @@ void IRVisitor::visit(const Max* op){
   }
 }
 
+void IRVisitor::visit(const Lcm* op){
+  for (auto e: op->operands) {
+    e.accept(this);
+  }
+}
+
 void IRVisitor::visit(const BitAnd* op){
   op->a.accept(this);
   op->b.accept(this);

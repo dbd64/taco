@@ -39,6 +39,7 @@ const string cHeaders =
 #endif
   "#define TACO_MIN(_a,_b) ((_a) < (_b) ? (_a) : (_b))\n"
   "#define TACO_MAX(_a,_b) ((_a) > (_b) ? (_a) : (_b))\n"
+  "#define TACO_LCM(_a,_b) (TODO)\n"
   "#define TACO_DEREF(_a) (((___context___*)(*__ctx__))->_a)\n"
   "#ifndef TACO_TENSOR_T_DEFINED\n"
   "#define TACO_TENSOR_T_DEFINED\n"
@@ -502,6 +503,22 @@ void CodeGen_C::visit(const Max* op) {
   }
   for (size_t i=0; i<op->operands.size()-1; i++) {
     stream << "TACO_MAX(";
+    op->operands[i].accept(this);
+    stream << ",";
+  }
+  op->operands.back().accept(this);
+  for (size_t i=0; i<op->operands.size()-1; i++) {
+    stream << ")";
+  }
+}
+
+void CodeGen_C::visit(const Lcm* op) {
+  if (op->operands.size() == 1) {
+    op->operands[0].accept(this);
+    return;
+  }
+  for (size_t i=0; i<op->operands.size()-1; i++) {
+    stream << "TACO_LCM(";
     op->operands[i].accept(this);
     stream << ",";
   }

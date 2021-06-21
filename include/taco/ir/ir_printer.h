@@ -34,6 +34,7 @@ protected:
   virtual void visit(const Rem*);
   virtual void visit(const Min*);
   virtual void visit(const Max*);
+  virtual void visit(const Lcm*);
   virtual void visit(const BitAnd*);
   virtual void visit(const BitOr*);
   virtual void visit(const Eq*);

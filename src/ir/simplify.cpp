@@ -2,6 +2,7 @@
 
 #include <map>
 #include <queue>
+#include <numeric>
 
 #include "taco/ir/ir.h"
 #include "taco/ir/ir_visitor.h"
@@ -326,6 +327,73 @@ struct ExpressionSimplifier : IRRewriter {
       expr = Div::make(a, b);
     }
   }
+
+    void visit(const Rem* op){
+      Expr a = rewrite(op->a);
+      Expr b = rewrite(op->b);
+
+      // a % 1 == 0
+      if(isa<Literal>(b)){
+        auto literal = to<Literal>(b);
+        if(literal->equalsScalar(1)){
+          expr = 0;
+          return;
+        }
+      }
+
+      expr = op;
+    }
+
+    template <typename T>
+    T gcd(T a, T b)
+    {
+      for (;;)
+      {
+        if (a == 0) return b;
+        b %= a;
+        if (b == 0) return a;
+        a %= b;
+      }
+    }
+
+    template <typename T>
+    T lcm(T a, T b)
+    {
+      T temp = gcd(a, b);
+      return temp ? (a / temp * b) : 0;
+    }
+
+    void visit(const Lcm* op){
+      std::vector<const Literal*> constOps;
+      std::vector<Expr> nonConstOps;
+      for (auto &a : op->operands){
+        Expr aRewrite = rewrite(a);
+        if(isa<Literal>(aRewrite)) {
+          const auto* l = to<Literal>(aRewrite);
+          constOps.push_back(l);
+        } else {
+          nonConstOps.push_back(aRewrite);
+        }
+      }
+
+      if(!constOps.empty()) {
+        int acc = 1 ;
+        for (auto& l : constOps){
+          auto lit = l->getValue<int>();
+          acc = lcm(acc, lit);
+        }
+        if(nonConstOps.empty()){
+          expr = acc;
+          return;
+        } else {
+          nonConstOps.emplace_back(acc);
+          expr = Lcm::make(nonConstOps, op->type);
+          return;
+        }
+      }
+
+      expr = op;
+    }
 };
 
 ir::Expr simplify(const ir::Expr& expr) {

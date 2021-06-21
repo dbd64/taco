@@ -31,6 +31,7 @@ enum class IRNodeType {
   Rem,
   Min,
   Max,
+  Lcm,
   BitAnd,
   BitOr,
   Not,
@@ -371,6 +372,18 @@ struct Max : public ExprNode<Max> {
   static Expr make(std::vector<Expr> operands, Datatype type);
 
   static const IRNodeType _type_info = IRNodeType::Max;
+};
+
+/** LCM of two values. */
+struct Lcm : public ExprNode<Lcm> {
+    std::vector<Expr> operands;
+
+    static Expr make(Expr a, Expr b);
+    static Expr make(Expr a, Expr b, Datatype type);
+    static Expr make(std::vector<Expr> operands);
+    static Expr make(std::vector<Expr> operands, Datatype type);
+
+    static const IRNodeType _type_info = IRNodeType::Lcm;
 };
 
 /** Bitwise and: a & b */

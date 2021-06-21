@@ -186,6 +186,15 @@ void IRPrinter::visit(const Max* op) {
   stream << ")";
 }
 
+void IRPrinter::visit(const Lcm* op) {
+  stream << "lcm(";
+  for (size_t i=0; i<op->operands.size(); i++) {
+    op->operands[i].accept(this);
+    if (i < op->operands.size()-1)
+      stream << ", ";
+  }
+  stream << ")";
+}
 
 void IRPrinter::visit(const BitAnd* op){
   printBinOp(op->a, op->b, "&", Precedence::BAND);

@@ -37,6 +37,7 @@ protected:
   void visit(const GetProperty*);
   void visit(const Min*);
   void visit(const Max*);
+  void visit(const Lcm*);
   void visit(const Allocate*);
   void visit(const Sqrt*);
   void visit(const Store*);
