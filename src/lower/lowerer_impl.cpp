@@ -1583,7 +1583,7 @@ Stmt LowererImpl::lowerMergeLattice(MergeLattice caseLattice, IndexVar coordinat
     // points in the merge lattice.
     IndexStmt zeroedStmt = zero(statement, getExhaustedAccesses(point, caseLattice));
     MergeLattice sublattice = caseLattice.subLattice(point);
-    Stmt mergeLoop = lowerMergePoint(sublattice, coordinate, coordinateVar, zeroedStmt, reducedAccesses, resolvedCoordDeclared);
+    Stmt mergeLoop = lowerMergePoint(sublattice, coordinate, coordinateVar, zeroedStmt, reducedAccesses, resolvedCoordDeclared, loopLattice.iterators());
     mergeLoopsVec.push_back(mergeLoop);
   }
   Stmt mergeLoops = Block::make(mergeLoopsVec);
@@ -1913,13 +1913,8 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
               auto lengthVar = fillVars[0];
               auto indexVar = fillVars[1];
 
-              fillsFixupVec.push_back(Assign::make(indexVar, ir::Rem::make(ir::Add::make(indexVar, run), lengthVar)));
               fillsFixupVec.push_back(Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
-
-              // TODO: need to update the index variable for any which are still in a fill region
-              // No need to update the fill region or length
-              // TODO: need to update fill value
-              // No need to update the coordinate or positions of anything
+              fillsFixupVec.push_back(Assign::make(indexVar, ir::Rem::make(ir::Add::make(indexVar, run), lengthVar)));
             }
           }
           Stmt fillsFixup = Block::make(fillsFixupVec);
@@ -1937,11 +1932,6 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
 
           body = IfThenElse::make(ifCond, body,
                                   Block::make(loopBoundDecl, startDecl, elseLoop, runDecl, appendFill, fillsFixup, incIterators, coordFixup, Continue::make()));
-        } else {
-//          whileBodyStmts.push_back(addAssign(coordinate, 1));
-//          auto cond = Lt::make(coordinate, Min::make(coordVars));
-//          auto whileBody = Block::make(whileBodyStmts);
-//          body = While::make(cond, whileBody);
         }
       }
 

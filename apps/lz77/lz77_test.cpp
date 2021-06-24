@@ -374,12 +374,67 @@ int test_mixed() {
   return 0;
 }
 
+void test_repeat_two_csr() {
+  Func copy = getCopyFunc();
+  Func plus_ = getPlusFunc();
+
+  Tensor<double> A("A", {11}, lz77f, 0);
+  Tensor<double> B = lz77_two_repeat("B", 1,2);
+  Tensor<double> C("C", {11}, {Compressed}, 0);
+  Tensor<double> result("result", {11}, dv, 0);
+
+  C(0) = 1;
+  C(5) = 2;
+  C(9) = 5;
+  C(10) = 0;
+
+  A(i) = plus_(B(i), C(i));
+  A.setAssembleWhileCompute(true);
+  A.compile();
+  A.compute();
+
+  result(i) = copy(A(i));
+  result.setAssembleWhileCompute(true);
+  result.compile();
+  result.compute();
+
+  Tensor<double> A_("dA", {11},   dv, 0);
+  Tensor<double> B_("dB", {11},   dv, 0);
+  Tensor<double> C_("dC", {11},   dv, 0);
+
+  B_(i) = copy(B(i));
+  B_.setAssembleWhileCompute(true);
+  B_.compile();
+  B_.compute();
+
+  C_(i) = copy(C(i));
+  C_.setAssembleWhileCompute(true);
+  C_.compile();
+  C_.compute();
+
+  A_(i) = B_(i) + C_(i);
+
+  A_.setAssembleWhileCompute(true);
+  A_.compile();
+  A_.compute();
+
+  std::cout << B << std::endl;
+  std::cout << C << std::endl << std::endl;
+
+  std::cout << B_ << std::endl;
+  std::cout << C_ << std::endl << std::endl;
+
+  std::cout << A << std::endl;
+  std::cout << A_ << std::endl;
+  std::cout << result << std::endl;
+}
 
 int main() {
 //  test_zeros();
 //  test_one_rle();
 //  test_repeat_two();
 //  test_mixed_two_three();
-  test_mixed();
+//  test_mixed();
+  test_repeat_two_csr();
   return 0;
 }
