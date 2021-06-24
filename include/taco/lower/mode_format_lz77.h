@@ -44,6 +44,11 @@ namespace taco {
         ModeFunction getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords,
                                    Mode mode) const override;
 
+        ir::Stmt getFillRegionAppend(ir::Expr p, ir::Expr i,
+                            ir::Expr start, ir::Expr length,
+                            ir::Expr run, Mode mode) const override;
+
+
     protected:
         ir::Expr getPosArray(ModePack pack) const;
         ir::Expr getDistArray(ModePack pack) const;

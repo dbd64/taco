@@ -304,6 +304,12 @@ bool ModeFormat::updatesFillRegion() const {
   return impl->updatesFillRegion;
 }
 
+bool ModeFormat::hasAppendFillRegion() const {
+  taco_iassert(defined());
+  return impl->hasAppendFillRegion;
+}
+
+
 std::vector<AttrQuery> ModeFormat::getAttrQueries(
     std::vector<IndexVar> parentCoords, 
     std::vector<IndexVar> childCoords) const {

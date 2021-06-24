@@ -269,6 +269,18 @@ bool Iterator::isYieldPosPure() const {
   return getMode().defined() && getMode().getModeFormat().isYieldPosPure();
 }
 
+bool Iterator::updatesFillRegion() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().updatesFillRegion();
+}
+
+bool Iterator::hasAppendFillRegion() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return false;
+  return getMode().defined() && getMode().getModeFormat().hasAppendFillRegion();
+}
+
 ModeFunction Iterator::coordBounds(const std::vector<ir::Expr>& coords) const {
   taco_iassert(defined() && content->mode.defined());
   return getMode().getModeFormat().impl->coordIterBounds(coords, getMode());
@@ -422,6 +434,13 @@ Stmt Iterator::getFinalizeYieldPos(const Expr& prevSize) const {
 ModeFunction Iterator::getFillRegion(const ir::Expr& pos, const std::vector<ir::Expr>& coords) const {
   taco_iassert(defined() && content->mode.defined());
   return getMode().getModeFormat().impl->getFillRegion(pos, coords, getMode());
+}
+
+Stmt Iterator::getFillRegionAppend(const ir::Expr& p, const ir::Expr& i,
+                                   const ir::Expr& start, const ir::Expr& length,
+                                   const ir::Expr& run) const {
+  taco_iassert(defined() && content->mode.defined());
+  return getMode().getModeFormat().impl->getFillRegionAppend(p,i,start,length,run, getMode());
 }
 
 

@@ -243,6 +243,22 @@ namespace taco {
       return Block::make({initCs, finalizeLoop});
     }
 
+    Stmt
+    LZ77ModeFormat::getFillRegionAppend(ir::Expr p, ir::Expr i,
+                                        ir::Expr start, ir::Expr length,
+                                        ir::Expr run, Mode mode) const {
+      Expr distArray = getDistArray(mode.getModePack());
+      Expr stride = (int)mode.getModePack().getNumModes();
+      Expr distValue = ir::Sub::make(p, start);
+      Stmt storeDist = Store::make(distArray, ir::Mul::make(p, stride), distValue);
+
+      Expr runArray = getRunArray(mode.getModePack());
+      Stmt storeRun = Store::make(runArray, ir::Mul::make(p, stride), run);
+
+      return Block::make(storeDist, storeRun);
+    }
+
+
     vector<Expr> LZ77ModeFormat::getArrays(Expr tensor, int mode,
                                                     int level) const {
       std::string arraysName = util::toString(tensor) + std::to_string(level);

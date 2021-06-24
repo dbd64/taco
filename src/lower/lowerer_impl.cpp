@@ -1598,7 +1598,8 @@ Stmt LowererImpl::lowerMergeLattice(MergeLattice caseLattice, IndexVar coordinat
 
 Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
                                   ir::Expr coordinate, IndexVar coordinateVar, IndexStmt statement,
-                                  const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared)
+                                  const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared,
+                                  std::vector<Iterator> allIterators)
 {
   MergePoint point = pointLattice.points().front();
 
@@ -1789,7 +1790,9 @@ private:
 
 Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, IndexStmt stmt,
                                   MergeLattice caseLattice,
-                                  const std::set<Access>& reducedAccesses)
+                                  const std::set<Access>& reducedAccesses,
+                                  std::vector<Iterator> allIterators,
+                                  std::vector<Iterator> iterators)
 {
   vector<Stmt> result;
 
@@ -1844,29 +1847,102 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
 
       // Construct case body
       IndexStmt zeroedStmt = zero(stmt, getExhaustedAccesses(point, loopLattice));
-//      std::cout << zeroedStmt << std::endl;
+//      std::cout << "[lowerMergeCases] zeroedStmt: " << zeroedStmt << std::endl;
       Stmt body = lowerForallBody(coordinate, zeroedStmt, {},
                                   inserters, appenders, MergeLattice({point}), reducedAccesses);
 
       auto fillsResult = AllFillsVisitor().check(zeroedStmt);
-      if (fillsResult.first){
+      if (fillsResult.first) {
         vector<Stmt> whileBodyStmts;
         whileBodyStmts.push_back(body);
-        for (auto& tensorVar : fillsResult.second){
-          auto fillVars = getFillRegionVars(getTensorVar(tensorVar));
-          auto lengthVar = fillVars[0];
-          auto indexVar = fillVars[1];
-          auto fillRegion = GetProperty::make(getTensorVar(tensorVar), TensorProperty::FillRegion);
-          auto fillVariable = GetProperty::make(getTensorVar(tensorVar), TensorProperty::FillValue);
+//        std::cout << "[lowerMergeCases] point: " << point << std::endl;
+        for (auto &iterator : allIterators) {
+//          std::cout << "[lowerMergeCases] iterator: " << iterator << std::endl;
+          if (iterator.updatesFillRegion()) {
+            auto fillVars = getFillRegionVars(iterator.getTensor());
+            auto lengthVar = fillVars[0];
+            auto indexVar = fillVars[1];
+            auto fillRegion = GetProperty::make(iterator.getTensor(), TensorProperty::FillRegion);
+            auto fillVariable = GetProperty::make(iterator.getTensor(), TensorProperty::FillValue);
 
-          whileBodyStmts.push_back(Assign::make(indexVar, ir::Rem::make(ir::Add::make(indexVar, 1), lengthVar)));
-          whileBodyStmts.push_back(Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
-
+            whileBodyStmts.push_back(Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
+            whileBodyStmts.push_back(Assign::make(indexVar, ir::Rem::make(ir::Add::make(indexVar, 1), lengthVar)));
+          }
         }
-        whileBodyStmts.push_back(addAssign(coordinate,1));
-        auto cond = Lt::make(coordinate, Min::make(coordVars));
-        auto whileBody = Block::make(whileBodyStmts);
-        body = While::make(cond, whileBody);
+
+        if (appenders.size() == 1 && appenders[0].hasAppendFillRegion()) {
+          auto appender = appenders[0];
+          std::vector<Expr> lengths;
+          for (auto &iterator : allIterators) {
+            if (iterator.updatesFillRegion()) {
+              auto fillVars = getFillRegionVars(iterator.getTensor());
+              auto lengthVar = fillVars[0];
+              lengths.push_back(lengthVar);
+            }
+          }
+          if(lengths.empty()){
+            lengths.emplace_back(1);
+          }
+          whileBodyStmts.push_back(addAssign(coordinate, 1));
+
+          auto ifCond = Lt::make(ir::Sub::make(Min::make(coordVars), coordinate), Lcm::make(lengths));
+
+          auto whileCond = Lt::make(coordinate, Min::make(coordVars));
+          auto whileLoop = While::make(whileCond, Block::make(whileBodyStmts));
+
+          Expr startVar = Var::make("startVar", Int());
+          Stmt startDecl = VarDecl::make(startVar, appender.getPosVar());
+          Expr loopBound = Var::make("loopBound", Int());
+          Stmt loopBoundDecl = VarDecl::make(loopBound, ir::Add::make(coordinate, Lcm::make(lengths)));
+          auto elseLoop = While::make(
+                  Lt::make(coordinate, loopBound),
+                  Block::make(whileBodyStmts));
+          Expr length = Lcm::make(lengths);
+          Expr run = Var::make("runValue", Int());
+          Stmt runDecl = VarDecl::make(run, ir::Sub::make(Min::make(coordVars), coordinate));
+          auto appendFill = appender.getFillRegionAppend(ir::Sub::make(appender.getPosVar(),1), coordinate,
+                                                         ir::Sub::make(startVar, 1), length, run);
+          Stmt coordFixup = Assign::make(coordinate, Min::make(coordVars));
+
+          vector<Stmt> fillsFixupVec;
+          for (auto &iterator : allIterators) {
+            if (iterator.updatesFillRegion()) {
+              auto fillVariable = GetProperty::make(iterator.getTensor(), TensorProperty::FillValue);
+              auto fillRegion = GetProperty::make(iterator.getTensor(), TensorProperty::FillRegion);
+              auto fillVars = getFillRegionVars(iterator.getTensor());
+              auto lengthVar = fillVars[0];
+              auto indexVar = fillVars[1];
+
+              fillsFixupVec.push_back(Assign::make(indexVar, ir::Rem::make(ir::Add::make(indexVar, run), lengthVar)));
+              fillsFixupVec.push_back(Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
+
+              // TODO: need to update the index variable for any which are still in a fill region
+              // No need to update the fill region or length
+              // TODO: need to update fill value
+              // No need to update the coordinate or positions of anything
+            }
+          }
+          Stmt fillsFixup = Block::make(fillsFixupVec);
+
+          vector<Expr> fillsResultTensors;
+          for (auto& tensorVar : fillsResult.second){
+            fillsResultTensors.push_back(getTensorVar(tensorVar));
+          }
+
+          auto filtered = filter(iterators, [&](Iterator it){
+            return !it.isDimensionIterator();
+          });
+
+          Stmt incIterators = codeToIncIteratorVars(coordinate, coordinateVar, filtered, {});
+
+          body = IfThenElse::make(ifCond, body,
+                                  Block::make(loopBoundDecl, startDecl, elseLoop, runDecl, appendFill, fillsFixup, incIterators, coordFixup, Continue::make()));
+        } else {
+//          whileBodyStmts.push_back(addAssign(coordinate, 1));
+//          auto cond = Lt::make(coordinate, Min::make(coordVars));
+//          auto whileBody = Block::make(whileBodyStmts);
+//          body = While::make(cond, whileBody);
+        }
       }
 
       if (coordComparisons.empty()) {
@@ -3684,8 +3760,7 @@ Stmt LowererImpl::codeToUpdateFills(Expr coordinate, IndexVar coordinateVar, vec
 
 
   for (auto& iterator : iterators) {
-    if(iterator.getMode().defined() && iterator.getMode().getModeFormat().defined() &&
-       iterator.getMode().getModeFormat().updatesFillRegion()){
+    if(iterator.updatesFillRegion()){
       auto f = iterator.getFillRegion(iterator.getPosVar(), coordinates(iterator));
       auto coord = iterator.posAccess(iterator.getPosVar(), coordinates(iterator))[0];
 

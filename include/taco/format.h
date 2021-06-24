@@ -152,6 +152,7 @@ public:
 
   /// TODO
   bool updatesFillRegion() const;
+  bool hasAppendFillRegion() const;
 
   std::vector<AttrQuery> getAttrQueries(
       std::vector<IndexVar> parentCoords, 

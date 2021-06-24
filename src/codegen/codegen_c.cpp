@@ -39,7 +39,7 @@ const string cHeaders =
 #endif
   "#define TACO_MIN(_a,_b) ((_a) < (_b) ? (_a) : (_b))\n"
   "#define TACO_MAX(_a,_b) ((_a) > (_b) ? (_a) : (_b))\n"
-  "#define TACO_LCM(_a,_b) (TODO)\n"
+  "#define TACO_LCM(_a,_b) (taco_lcm((_a),(_b)))\n"
   "#define TACO_DEREF(_a) (((___context___*)(*__ctx__))->_a)\n"
   "#ifndef TACO_TENSOR_T_DEFINED\n"
   "#define TACO_TENSOR_T_DEFINED\n"
@@ -139,6 +139,17 @@ const string cHeaders =
   "  free(t->mode_ordering);\n"
   "  free(t->mode_types);\n"
   "  free(t);\n"
+  "}\n"
+  "int taco_gcd(int a, int b) {\n"
+  "  // TODO: https://lemire.me/blog/2013/12/26/fastest-way-to-compute-the-greatest-common-divisor/\n"
+  "  if (b)\n"
+  "   return taco_gcd(b, a % b);\n"
+  "  else\n"
+  "   return a;"
+  "}\n"
+  "int taco_lcm(int a, int b) {\n"
+  "  int temp = taco_gcd(a, b);\n"
+  "  return temp ? (a / temp * b) : 0;\n"
   "}\n"
   "#endif\n";
 } // anonymous namespace

@@ -240,6 +240,14 @@ public:
                 Mode mode) const;
   /// @}
 
+  /// Level functions that implement fill append capability.
+  /// @{
+  virtual ir::Stmt
+  getFillRegionAppend(ir::Expr p, ir::Expr i,
+                      ir::Expr start, ir::Expr length,
+                      ir::Expr run, Mode mode) const;
+  /// @}
+
   /// Returns arrays associated with a tensor mode
   virtual std::vector<ir::Expr>
   getArrays(ir::Expr tensor, int mode, int level) const = 0;

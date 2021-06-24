@@ -171,12 +171,15 @@ protected:
      */
   virtual ir::Stmt lowerMergePoint(MergeLattice pointLattice,
                                    ir::Expr coordinate, IndexVar coordinateVar, IndexStmt statement,
-                                   const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared);
+                                   const std::set<Access>& reducedAccesses, bool resolvedCoordDeclared,
+                                   std::vector<Iterator> allIterators);
 
   /// Lower a merge lattice to cases.
   virtual ir::Stmt lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, IndexStmt stmt,
                                    MergeLattice lattice,
-                                   const std::set<Access>& reducedAccesses);
+                                   const std::set<Access>& reducedAccesses,
+                                   std::vector<Iterator> allIterators,
+                                   std::vector<Iterator> iterators);
 
   /// Lower a forall loop body.
   virtual ir::Stmt lowerForallBody(ir::Expr coordinate, IndexStmt stmt,

@@ -80,6 +80,8 @@ public:
   bool hasLocate() const;
   bool hasInsert() const;
   bool hasAppend() const;
+  bool updatesFillRegion() const;
+  bool hasAppendFillRegion() const;
 
   /// Attributes of ungrouped insertion level functions.
   bool hasSeqInsertEdge() const;
@@ -186,6 +188,10 @@ public:
   /// TODO
   ModeFunction getFillRegion(const ir::Expr& pos,
                          const std::vector<ir::Expr>& coords) const;
+
+  ir::Stmt getFillRegionAppend(const ir::Expr& p, const ir::Expr& i,
+                               const ir::Expr& start, const ir::Expr& length,
+                               const ir::Expr& run) const;
 
 
     /// Returns true if the iterator is defined, false otherwise.

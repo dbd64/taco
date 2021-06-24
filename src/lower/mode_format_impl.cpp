@@ -299,6 +299,14 @@ ModeFormatImpl::getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords, Mode m
   return ModeFunction();
 }
 
+Stmt
+ModeFormatImpl::getFillRegionAppend(ir::Expr p, ir::Expr i,
+                    ir::Expr start, ir::Expr length,
+                    ir::Expr run, Mode mode) const {
+  return Stmt();
+}
+
+
 bool ModeFormatImpl::equals(const ModeFormatImpl& other) const {
   return (isFull == other.isFull &&
           isOrdered == other.isOrdered &&
