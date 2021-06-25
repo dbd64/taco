@@ -1672,7 +1672,7 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
 
   // One case for each child lattice point lp
   Stmt caseStmts = lowerMergeCases(coordinate, coordinateVar, statement, pointLattice,
-                                   reducedAccesses);
+                                   reducedAccesses, allIterators, iterators);
 
   // TODO
   Stmt updateFillRegions = codeToUpdateFills(coordinate, coordinateVar, iterators, mergers);
