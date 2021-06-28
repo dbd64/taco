@@ -78,6 +78,5 @@ void deinit_taco_tensor_t(taco_tensor_t* t) {
   free_mem(t->dimensions);
   free_mem(t->mode_ordering);
   free_mem(t->mode_types);
-  free_mem(t->fill_value);
   free_mem(t);
 }
