@@ -41,7 +41,7 @@ const string cHeaders =
   "#define TACO_DEREF(_a) (((___context___*)(*__ctx__))->_a)\n"
   "#ifndef TACO_TENSOR_T_DEFINED\n"
   "#define TACO_TENSOR_T_DEFINED\n"
-  "typedef enum { taco_mode_dense, taco_mode_sparse } taco_mode_t;\n"
+  "typedef enum { taco_mode_dense, taco_mode_sparse, taco_mode_sparse3 } taco_mode_t;\n"
   "typedef struct {\n"
   "  int32_t      order;         // tensor order (number of modes)\n"
   "  int32_t*     dimensions;    // tensor dimensions\n"

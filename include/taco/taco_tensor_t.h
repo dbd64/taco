@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-typedef enum { taco_mode_dense, taco_mode_sparse } taco_mode_t;
+typedef enum { taco_mode_dense, taco_mode_sparse, taco_mode_sparse3 } taco_mode_t;
 
 typedef struct taco_tensor_t {
   int32_t      order;         // tensor order (number of modes)
