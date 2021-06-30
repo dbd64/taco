@@ -36,10 +36,10 @@ TensorBase makeLZ77(const std::string& name, const std::vector<int>& dimensions,
 
 Tensor<double> lz77_zeros(std::string name) {
   return makeLZ77<double>(name, {11},
-                          {0, 12},
-                          {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0  },
-                          {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0  },
-                          {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0});
+                          {0, 11},
+                          {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0  },
+                          {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0  },
+                          {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0});
 }
 
 Tensor<double> lz77_one_rle(std::string name, double val) {
