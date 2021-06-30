@@ -97,11 +97,11 @@ gen_random_lz77(std::string name, int size, double uncompressed_threshold,
 }
 
 constexpr int size_lower = 1'000;
-constexpr int size_upper = 10'000; //100'000'000;
+constexpr int size_upper = 100'000'000;
 constexpr int size_mult = 10;
 
 int numRandTensors = 0;
-constexpr int minElements = 100'000;
+constexpr int minElements = 10'000'000;
 
 static void CustomArguments(benchmark::internal::Benchmark *b) {
   for (int size = size_lower; size <= size_upper; size *= size_mult) { // Size of vector
@@ -222,30 +222,31 @@ static void BM_all(benchmark::State &state) {
   bool isDense = state.range(2);
   auto plus_ = getPlusFunc();
 
+  // std::default_random_engine gen2(SEED);
+  // gen = gen2;
+
+  auto d0 = gen_random_lz77("t0", tsize, thresh, 1, 1'000, 1'000, 10'000, 0, 255);
+  auto d1 = gen_random_lz77("t1", tsize, thresh, 1, 1'000, 1'000, 10'000, 0, 255);
+
   for (auto _ : state) {
-//    state.PauseTiming();
-
-//    std::cout << "gen d0" << std::endl;
-    auto d0 = gen_random_lz77("t0", tsize, thresh, 1, 1'000, 1'000, 10'000, 0, 255);
-
-//    std::cout << "gen d1" << std::endl;
-    auto d1 = gen_random_lz77("t1", tsize, thresh, 1, 1'000, 1'000, 10'000, 0, 255);
+    state.PauseTiming();
 
     Tensor<uint8_t> expected("expected_", {tsize}, isDense ? dv : lz77f);
     const IndexVar i("i");
     expected(i) = plus_(d0(i), d1(i));
     expected.setAssembleWhileCompute(true);
     expected.compile();
-//    std::cout << "compile" << std::endl;
 
-//    state.ResumeTiming();
-//    expected.compute();
+    state.ResumeTiming();
+
+    expected.compute();
   }
 }
 
 BENCHMARK(BM_all)->Apply(CustomArguments)\
                  ->MeasureProcessCPUTime()\
-                 ->Unit(benchmark::kMicrosecond);
+                 ->Unit(benchmark::kMicrosecond)\
+                 ->Repetitions(10);
 //                 ->ArgNames({"size", "value_upper", "rle_lower", "rle_upper", "rle_bits"})\
 ;
 //->Repetitions(10)->ReportAggregatesOnly(false)->DisplayAggregatesOnly(false);
