@@ -23,7 +23,8 @@ namespace taco {
             ModeFormatImpl("lz77", isFull, isOrdered, isUnique, false, true,
                            isZeroless, false, true, false, false,
                            true, false, false, false, true,
-                           true, false),
+                           false, taco_positer_kind::BYTE,
+                           false),
             allocSize(allocSize) {
     }
 
@@ -84,74 +85,97 @@ namespace taco {
       return ModeFunction();
     }
 
+    Expr LeftShift_make(Expr lhs, Expr rhs) {
+      return BinOp::make(lhs, rhs, " << ");
+    }
 
+    Expr RightShift_make(Expr lhs, Expr rhs) {
+      return BinOp::make(lhs, rhs, " >> ");
+    }
 
     ModeFunction LZ77ModeFormat::posIterAccess(ir::Expr pos,
-                                                        std::vector<ir::Expr> coords,
-                                                        Mode mode) const {
+                                               std::vector<ir::Expr> coords,
+                                               ir::Expr values, Datatype type,
+                                               Mode mode) const {
       taco_iassert(mode.getPackLocation() == 0);
 
+//      0  XXXXXXX -> read value directly
+//      10  XXXXXX -> start value at next byte
+//      11  XXXXXX -> next two bytes are distance, next two bytes are run [b0,b1,b2,b3]
+
+      Expr msb0Check = Eq::make(BitAnd::make(RightShift_make(Load::make(values, pos), 7), 1), 0);
+      Expr msb10Check = Eq::make(BitAnd::make(RightShift_make(Load::make(values, pos), 6), 1), 0);
+      Expr msb11Check = Eq::make(BitAnd::make(RightShift_make(Load::make(values, pos), 6), 1), 1);
+      Expr found = Var::make("found", Bool);
+      Expr distVar = Var::make("dist", Int());
+      Expr runVar = Var::make("run", Int());
+      Expr regionPointer = Var::make("region_pointer", Int());
       Expr posAccessCoord = getPosCoordVar(mode);
+      Expr F = getPosCoordVar(mode);
+
       Stmt coordDecl = VarDecl::make(posAccessCoord, getCoordVar(mode));
+      Stmt foundDecl = VarDecl::make(found, true);
+      Stmt distDecl = VarDecl::make(distVar, 0);
+      Stmt runDecl = VarDecl::make(runVar, 0);
 
-      Expr distArray = getDistArray(mode.getModePack());
-      Expr stride = (int)mode.getModePack().getNumModes();
-      Expr dist = Load::make(distArray, ir::Mul::make(pos, stride));
+      Stmt msb0Stmt =  Block::make(addAssign(getCoordVar(mode), 1), Assign::make(found, true));
+      Stmt msb10Stmt = Block::make(addAssign(getCoordVar(mode), 1), addAssign(pos, 1), Assign::make(found, true));
+      Stmt msb11Stmt = Block::make(
+              Assign::make(found, false),
+              Assign::make(distVar, Load::make(ir::Cast::make(Load::make(values, ir::Add::make(pos, 1), true), UInt16, true))),
+              Assign::make(runVar, Load::make(ir::Cast::make(Load::make(values, ir::Add::make(pos, 3), true), UInt16, true))),
+              addAssign(pos,5), addAssign(getCoordVar(mode), runVar), Assign::make(posAccessCoord, -1)
+      );
 
-      Expr runArray = getRunArray(mode.getModePack());
-      Expr run = Load::make(runArray, ir::Mul::make(pos, stride));
+      auto fillRegion = Load::make(values, ir::Sub::make(ir::Sub::make(pos, 5), ir::Mul::make(distVar, type.getNumBytes())), true);
+      if (type.getKind() != Datatype::UInt8){
+        fillRegion = ir::Cast::make(fillRegion, type, true);
+      }
+      auto fillLen = ir::Min::make(distVar,runVar);
 
-      Stmt ifDistRun = IfThenElse::make( ir::Eq::make(getCoordVar(mode), coords.back()),
-              Block::make(IfThenElse::make(ir::Eq::make(dist, 0),
-                                        Block::make(addAssign(getCoordVar(mode), 1)),
-                                           Block::make(addAssign(getCoordVar(mode), ir::Add::make(run, 1))))));
+      Stmt ifStmt = IfThenElse::make(msb0Check, msb0Stmt,
+                                     IfThenElse::make(msb10Check, msb10Stmt, msb11Stmt));
 
-      Stmt blk = Block::make(coordDecl, ifDistRun);
 
-      return ModeFunction(blk, {posAccessCoord, true});
+      Expr coordEq = Eq::make(posAccessCoord, coords.back());
+
+      ifStmt = IfThenElse::make(coordEq, Block::make(ifStmt));
+
+      Stmt blk = Block::make(coordDecl, foundDecl, distDecl, runDecl, ifStmt);
+
+      return ModeFunction(blk, {posAccessCoord, found, fillRegion, fillLen, ir::Neg::make(found)});
     }
 
-    ModeFunction LZ77ModeFormat::getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords,
-                               Mode mode) const {
-
-
-      Expr distArray = getDistArray(mode.getModePack());
-      Expr stride = (int)mode.getModePack().getNumModes();
-      Expr dist = Load::make(distArray, ir::Mul::make(pos, stride));
-
-      Expr runArray = getRunArray(mode.getModePack());
-      Expr run = Load::make(runArray, ir::Mul::make(pos, stride));
-
-      Expr updateFill = Var::make("updateFill", Bool);
-      Stmt updateFillDecl = VarDecl::make(updateFill, false);
-      Stmt ifDistRun = IfThenElse::make(ir::Neq::make(dist, 0),
-                                        Assign::make(updateFill, true));
-
-      Expr startPos = ir::Add::make(ir::Sub::make(pos, dist), 1);
-
-      Expr length = Var::make("fill_length", Int());
-      Stmt lengthDecl = VarDecl::make(length, Min::make(run,dist));
-
-      Stmt blk = Block::make(updateFillDecl, ifDistRun, lengthDecl);
-
-      return ModeFunction(blk, {startPos, length, run, updateFill});
-    }
+//    ModeFunction LZ77ModeFormat::getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords,
+//                               Mode mode) const {
+//      Expr distArray = getDistArray(mode.getModePack());
+//      Expr stride = (int)mode.getModePack().getNumModes();
+//      Expr dist = Load::make(distArray, ir::Mul::make(pos, stride));
+//
+//      Expr runArray = getRunArray(mode.getModePack());
+//      Expr run = Load::make(runArray, ir::Mul::make(pos, stride));
+//
+//      Expr updateFill = Var::make("updateFill", Bool);
+//      Stmt updateFillDecl = VarDecl::make(updateFill, false);
+//      Stmt ifDistRun = IfThenElse::make(ir::Neq::make(dist, 0),
+//                                        Assign::make(updateFill, true));
+//
+//      Expr startPos = ir::Add::make(ir::Sub::make(pos, dist), 1);
+//
+//      Expr length = Var::make("fill_length", Int());
+//      Stmt lengthDecl = VarDecl::make(length, Min::make(run,dist));
+//
+//      Stmt blk = Block::make(updateFillDecl, ifDistRun, lengthDecl);
+//
+//      return ModeFunction(blk, {startPos, length, run, updateFill});
+//    }
 
     Stmt LZ77ModeFormat::getAppendCoord(Expr p, Expr i, Mode mode) const {
       taco_iassert(mode.getPackLocation() == 0);
-      Expr distArray = getDistArray(mode.getModePack());
-      Expr runArray = getRunArray(mode.getModePack());
       Expr stride = (int)mode.getModePack().getNumModes();
       Expr idx = ir::Mul::make(p, stride);
 
-
-      Stmt maybeResizeDist = doubleSizeIfFull(distArray, getDistCapacity(mode), p);
-      Stmt maybeResizeRun = doubleSizeIfFull(runArray, getRunCapacity(mode), p);
-
-
-      return Block::make( maybeResizeDist, maybeResizeRun,
-              Store::make(distArray, idx, 0),
-              Store::make(runArray, idx, 0));
+      return Block::make();
     }
 
     Stmt LZ77ModeFormat::getAppendEdges(Expr pPrev, Expr pBegin, Expr pEnd,
@@ -214,11 +238,6 @@ namespace taco {
         initStmts.push_back(For::make(pVar, 1, initCapacity, 1, storePos));
       }
 
-      initStmts.push_back(Allocate::make(getDistArray(mode.getModePack()), 100));
-      initStmts.push_back(Allocate::make(getRunArray(mode.getModePack()), 100));
-      initStmts.push_back(VarDecl::make(getDistCapacity(mode), 100));
-      initStmts.push_back(VarDecl::make(getRunCapacity(mode), 100));
-
       return Block::make(initStmts);
     }
 
@@ -243,44 +262,31 @@ namespace taco {
       return Block::make({initCs, finalizeLoop});
     }
 
-    Stmt
-    LZ77ModeFormat::getFillRegionAppend(ir::Expr p, ir::Expr i,
-                                        ir::Expr start, ir::Expr length,
-                                        ir::Expr run, Mode mode) const {
-      Expr distArray = getDistArray(mode.getModePack());
-      Expr stride = (int)mode.getModePack().getNumModes();
-      Expr distValue = ir::Sub::make(p, start);
-      Stmt storeDist = Store::make(distArray, ir::Mul::make(p, stride), distValue);
-
-      Expr runArray = getRunArray(mode.getModePack());
-      Stmt storeRun = Store::make(runArray, ir::Mul::make(p, stride), run);
-
-      return Block::make(storeDist, storeRun);
-    }
-
+//    Stmt
+//    LZ77ModeFormat::getFillRegionAppend(ir::Expr p, ir::Expr i,
+//                                        ir::Expr start, ir::Expr length,
+//                                        ir::Expr run, Mode mode) const {
+//      Expr distArray = getDistArray(mode.getModePack());
+//      Expr stride = (int)mode.getModePack().getNumModes();
+//      Expr distValue = ir::Sub::make(p, start);
+//      Stmt storeDist = Store::make(distArray, ir::Mul::make(p, stride), distValue);
+//
+//      Expr runArray = getRunArray(mode.getModePack());
+//      Stmt storeRun = Store::make(runArray, ir::Mul::make(p, stride), run);
+//
+//      return Block::make(storeDist, storeRun);
+//    }
 
     vector<Expr> LZ77ModeFormat::getArrays(Expr tensor, int mode,
                                                     int level) const {
       std::string arraysName = util::toString(tensor) + std::to_string(level);
       return {GetProperty::make(tensor, TensorProperty::Indices,
-                                level - 1, 0, arraysName + "_pos"),
-              GetProperty::make(tensor, TensorProperty::Indices,
-                                level - 1, 1, arraysName + "_dist"),
-              GetProperty::make(tensor, TensorProperty::Indices,
-                                level - 1, 2, arraysName + "_run")};
+                                level - 1, 0, arraysName + "_pos")};
 
     }
 
     Expr LZ77ModeFormat::getPosArray(ModePack pack) const {
       return pack.getArray(0);
-    }
-
-    Expr LZ77ModeFormat::getDistArray(ModePack pack) const {
-      return pack.getArray(1);
-    }
-
-    Expr LZ77ModeFormat::getRunArray(ModePack pack) const {
-      return pack.getArray(2);
     }
 
     Expr LZ77ModeFormat::getCoordVar(Mode mode) const {
@@ -309,30 +315,6 @@ namespace taco {
 
     Expr LZ77ModeFormat::getPosCapacity(Mode mode) const {
       const std::string varName = mode.getName() + "_pos_capacity";
-
-      if (!mode.hasVar(varName)) {
-        Expr posCapacity = Var::make(varName, Int());
-        mode.addVar(varName, posCapacity);
-        return posCapacity;
-      }
-
-      return mode.getVar(varName);
-    }
-
-    Expr LZ77ModeFormat::getRunCapacity(Mode mode) const {
-      const std::string varName = mode.getName() + "_run_capacity";
-
-      if (!mode.hasVar(varName)) {
-        Expr posCapacity = Var::make(varName, Int());
-        mode.addVar(varName, posCapacity);
-        return posCapacity;
-      }
-
-      return mode.getVar(varName);
-    }
-
-    Expr LZ77ModeFormat::getDistCapacity(Mode mode) const {
-      const std::string varName = mode.getName() + "_dist_capacity";
 
       if (!mode.hasVar(varName)) {
         Expr posCapacity = Var::make(varName, Int());

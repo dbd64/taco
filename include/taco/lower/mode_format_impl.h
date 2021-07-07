@@ -98,7 +98,6 @@ private:
 
 std::ostream& operator<<(std::ostream&, const ModeFunction&);
 
-
 /// The abstract class to inherit from to add a new mode format to the system.
 /// The mode type implementation can then be passed to the `ModeType`
 /// constructor.
@@ -109,7 +108,8 @@ public:
                  bool hasCoordValIter, bool hasCoordPosIter, bool hasLocate, 
                  bool hasInsert, bool hasAppend, bool hasSeqInsertEdge, 
                  bool hasInsertCoord, bool isYieldPosPure, bool updatesFillRegion,
-                 bool hasAppendFillRegion, bool fill_last_value);
+                 bool hasAppendFillRegion, taco_positer_kind positer_kind,
+                 bool fill_last_value);
 
   virtual ~ModeFormatImpl();
 
@@ -151,6 +151,7 @@ public:
   /// `pos_iter_access(p_{k}, i_{1}, ..., i_{k−1}) -> i_{k}, found`
   virtual ModeFunction posIterAccess(ir::Expr pos, 
                                      std::vector<ir::Expr> coords,
+                                     ir::Expr values, Datatype type,
                                      Mode mode) const;
 
 
@@ -274,6 +275,7 @@ public:
   const bool isYieldPosPure;
   const bool updatesFillRegion;
   const bool hasAppendFillRegion;
+  taco_positer_kind positer_kind;
   const bool fill_last_value;
 
 protected:

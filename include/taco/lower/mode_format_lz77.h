@@ -18,7 +18,7 @@ namespace taco {
         ModeFormat copy(std::vector<ModeFormat::Property> properties) const override;
 
         ModeFunction posIterBounds(ir::Expr parentPos, Mode mode) const override;
-        ModeFunction posIterAccess(ir::Expr pos, std::vector<ir::Expr> coords,
+        ModeFunction posIterAccess(ir::Expr pos, std::vector<ir::Expr> coords, ir::Expr values, Datatype type,
                                    Mode mode) const override;
 
         ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;
@@ -41,29 +41,25 @@ namespace taco {
                                         Mode mode) const override;
 
 
-        ModeFunction getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords,
-                                   Mode mode) const override;
+//        ModeFunction getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords,
+//                                   Mode mode) const override;
 
-        ir::Stmt getFillRegionAppend(ir::Expr p, ir::Expr i,
-                            ir::Expr start, ir::Expr length,
-                            ir::Expr run, Mode mode) const override;
-
+//        ir::Stmt getFillRegionAppend(ir::Expr p, ir::Expr i,
+//                            ir::Expr start, ir::Expr length,
+//                            ir::Expr run, Mode mode) const override;
 
     protected:
         ir::Expr getPosArray(ModePack pack) const;
-        ir::Expr getDistArray(ModePack pack) const;
-        ir::Expr getRunArray(ModePack pack) const;
 
         ir::Expr getCoordVar(Mode mode) const;
         ir::Expr getPosCoordVar(Mode mode) const;
 
         ir::Expr getPosCapacity(Mode mode) const;
-        ir::Expr getDistCapacity(Mode mode) const;
-        ir::Expr getRunCapacity(Mode mode) const;
 
         bool equals(const ModeFormatImpl& other) const override;
 
         const long long allocSize;
+
     };
 }
 

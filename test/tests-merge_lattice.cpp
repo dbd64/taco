@@ -28,7 +28,7 @@ public:
   HashedModeFormat() : ModeFormatImpl("hashed", false, false, true, false,
                                       false, false, false, true, true, true, 
                                       false, true, true, false, false, false,
-                                      false) {}
+                                      taco_positer_kind::NONE, false) {}
 
   ModeFormat copy(std::vector<ModeFormat::Property> properties) const {
     return ModeFormat(std::make_shared<HashedModeFormat>());

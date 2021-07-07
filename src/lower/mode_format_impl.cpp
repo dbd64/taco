@@ -152,14 +152,16 @@ ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull,
                                bool hasLocate, bool hasInsert, bool hasAppend, 
                                bool hasSeqInsertEdge, bool hasInsertCoord,
                                bool isYieldPosPure, bool updatesFillRegion,
-                               bool hasAppendFillRegion, bool fill_last_value) :
+                               bool hasAppendFillRegion, taco_positer_kind positer_kind,
+                               bool fill_last_value) :
     name(name), isFull(isFull), isOrdered(isOrdered), isUnique(isUnique),
     isBranchless(isBranchless), isCompact(isCompact), isZeroless(isZeroless),
     hasCoordValIter(hasCoordValIter), hasCoordPosIter(hasCoordPosIter),
     hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend),
     hasSeqInsertEdge(hasSeqInsertEdge), hasInsertCoord(hasInsertCoord),
     isYieldPosPure(isYieldPosPure), updatesFillRegion(updatesFillRegion),
-    hasAppendFillRegion(hasAppendFillRegion), fill_last_value(fill_last_value) {
+    hasAppendFillRegion(hasAppendFillRegion), positer_kind(positer_kind),
+    fill_last_value(fill_last_value) {
 }
 
 ModeFormatImpl::~ModeFormatImpl() {
@@ -194,6 +196,7 @@ ModeFunction ModeFormatImpl::posIterBounds(ir::Expr parentPos, Mode mode) const 
 
 ModeFunction ModeFormatImpl::posIterAccess(ir::Expr pos,
                                          std::vector<ir::Expr> coords,
+                                         ir::Expr values, Datatype type,
                                          Mode mode) const {
   return ModeFunction();
 }
@@ -305,7 +308,6 @@ ModeFormatImpl::getFillRegionAppend(ir::Expr p, ir::Expr i,
                     ir::Expr run, Mode mode) const {
   return Stmt();
 }
-
 
 bool ModeFormatImpl::equals(const ModeFormatImpl& other) const {
   return (isFull == other.isFull &&

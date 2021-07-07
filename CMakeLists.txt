@@ -156,3 +156,9 @@ if(COVERAGE)
   endif(PYTHON)
   set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES coverage)
 endif(COVERAGE)
+
+add_library(lodepng STATIC
+        png/lodepng.cpp
+        png/lodepng.h)
+
+

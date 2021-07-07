@@ -521,10 +521,11 @@ Expr BinOp::make(Expr a, Expr b, std::string strStart, std::string strMid, std::
   return binopnode;
 }
 
-Expr Cast::make(Expr a, Datatype newType) {
+Expr Cast::make(Expr a, Datatype newType, bool isPointer) {
   Cast *cast = new Cast;
   cast->type = newType;
   cast->a = a;
+  cast->isPointer = isPointer;
   return cast;
 }
 

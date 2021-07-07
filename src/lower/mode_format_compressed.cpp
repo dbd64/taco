@@ -19,7 +19,8 @@ CompressedModeFormat::CompressedModeFormat(bool isFull, bool isOrdered,
                                            long long allocSize) :
     ModeFormatImpl("compressed", isFull, isOrdered, isUnique, false, true,
                    isZeroless, false, true, false, false, true, true, true, 
-                   false, false, false, isLastValueFill),
+                   false, false, false, taco_positer_kind::NONE,
+                   isLastValueFill),
     allocSize(allocSize) {
 }
 
@@ -96,6 +97,7 @@ ModeFunction CompressedModeFormat::coordBounds(Expr parentPos,
 
 ModeFunction CompressedModeFormat::posIterAccess(ir::Expr pos,
                                                  std::vector<ir::Expr> coords,
+                                                 ir::Expr values, Datatype type,
                                                  Mode mode) const {
   taco_iassert(mode.getPackLocation() == 0);
 

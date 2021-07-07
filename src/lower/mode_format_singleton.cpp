@@ -18,7 +18,7 @@ SingletonModeFormat::SingletonModeFormat(bool isFull, bool isOrdered,
                                          long long allocSize) :
     ModeFormatImpl("singleton", isFull, isOrdered, isUnique, true, true,
                    isZeroless, false, true, false, false, true, false, true, 
-                   true, false, false, false),
+                   true, false, false, taco_positer_kind::NONE, false),
     allocSize(allocSize) {
 }
 
@@ -71,6 +71,7 @@ ModeFunction SingletonModeFormat::posIterBounds(Expr parentPos,
 
 ModeFunction SingletonModeFormat::posIterAccess(ir::Expr pos,
                                                 std::vector<ir::Expr> coords,
+                                                ir::Expr values, Datatype type,
                                                 Mode mode) const {
   Expr idxArray = getCoordArray(mode.getModePack());
   Expr stride = (int)mode.getModePack().getNumModes();

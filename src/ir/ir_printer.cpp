@@ -245,9 +245,13 @@ void IRPrinter::visit(const BinOp* op) {
 }
 
 void IRPrinter::visit(const Cast* op) {
-  stream << "(" << keywordString(util::toString(op->type)) << ")";
+  if(op->isPointer) stream << "(";
+  stream << "(" << keywordString(util::toString(op->type));
+  if(op->isPointer) stream << "*";
+  stream << ")";
   parentPrecedence = Precedence::CAST;
   op->a.accept(this);
+  if(op->isPointer) stream << ")";
 }
 
 void IRPrinter::visit(const Call* op) {
@@ -360,11 +364,13 @@ void IRPrinter::visit(const Switch* op) {
 void IRPrinter::visit(const Load* op) {
   if (op->isAddrOf) stream << "&";
   parentPrecedence = Precedence::LOAD;
+  if(op->isAddrOf) stream << "(";
   op->arr.accept(this);
   stream << "[";
   parentPrecedence = Precedence::LOAD;
   op->loc.accept(this);
   stream << "]";
+  if(op->isAddrOf) stream << ")";
 }
 
 void IRPrinter::visit(const Malloc* op) {

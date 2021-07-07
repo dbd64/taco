@@ -496,6 +496,8 @@ protected:
   /// loop iterator variable should be incremented when the guard is fired.
   ir::Stmt strideBoundsGuard(Iterator iterator, ir::Expr access, bool incrementPosVar);
 
+
+  ir::Expr getValuesArrayFromIterator(Iterator iterator);
 private:
   bool assemble;
   bool compute;
@@ -593,6 +595,9 @@ private:
   /// Variables for iterating over and storing fill region information
   std::map<ir::Expr, std::vector<ir::Expr>> fillRegionVars;
 
+  //TODO
+  std::map<ir::Expr, Type> tensorTypes;
+  std::map<ir::Expr, TensorVar> tensorExprMap;
 };
 
 }

@@ -13,7 +13,7 @@ DenseModeFormat::DenseModeFormat(const bool isOrdered, const bool isUnique,
     ModeFormatImpl("dense", true, isOrdered, isUnique, false, true, isZeroless, 
                    false, false, true, true, false,
                    false, false, true, false, false,
-                   false) {
+                   taco_positer_kind::NONE, false) {
 }
 
 ModeFormat DenseModeFormat::copy(

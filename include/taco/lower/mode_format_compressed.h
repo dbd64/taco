@@ -24,7 +24,7 @@ public:
               std::vector<IndexVar> childCoords) const override;
 
   ModeFunction posIterBounds(ir::Expr parentPos, Mode mode) const override;
-  ModeFunction posIterAccess(ir::Expr pos, std::vector<ir::Expr> coords,
+  ModeFunction posIterAccess(ir::Expr pos, std::vector<ir::Expr> coords, ir::Expr values, Datatype type,
                                      Mode mode) const override;
 
   ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;

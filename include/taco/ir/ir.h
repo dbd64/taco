@@ -504,8 +504,9 @@ struct BinOp : public ExprNode<BinOp> {
 /** Type cast. */
 struct Cast : public ExprNode<Cast> {
   Expr a;
+  bool isPointer;
 
-  static Expr make(Expr a, Datatype newType);
+  static Expr make(Expr a, Datatype newType, bool isPointer = false);
 
   static const IRNodeType _type_info = IRNodeType::Cast;
 };

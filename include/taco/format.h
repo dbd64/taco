@@ -15,6 +15,8 @@ class ModeFormatImpl;
 class AttrQuery;
 class IndexVar;
 
+// TODO: It may also be beneficial to iterate over a bit stream
+enum class taco_positer_kind : uint8_t { NONE, VALUE, BYTE };
 
 /// A Format describes the data layout of a tensor, and the sparse index data
 /// structures that describe locations of non-zero tensor components.
@@ -153,6 +155,7 @@ public:
   /// TODO
   bool updatesFillRegion() const;
   bool hasAppendFillRegion() const;
+  taco_positer_kind getPosIterKind() const;
 
   std::vector<AttrQuery> getAttrQueries(
       std::vector<IndexVar> parentCoords, 

@@ -81,6 +81,25 @@ static void createFillRegionVars(const map<TensorVar, Expr>& tensorVars,
   }
 }
 
+static void createTensorTypeMap(const map<TensorVar, Expr>& tensorVars,
+                                 map<Expr, Type>* tensorTypes) {
+  for (auto& tensorVar : tensorVars) {
+    Expr tensor = tensorVar.second;
+    Type type = tensorVar.first.getType();
+    tensorTypes->insert({tensor, type});
+  }
+}
+
+static void createReverseTensorMap(const map<TensorVar, Expr>& tensorVars,
+                                map<Expr, TensorVar>* tensorMap) {
+  for (auto& tensorVar : tensorVars) {
+    Expr tensor = tensorVar.second;
+    TensorVar t = tensorVar.first;
+    tensorMap->insert({tensor, t});
+  }
+}
+
+
 static void createCapacityVars(const map<TensorVar, Expr>& tensorVars,
                                map<Expr, Expr>* capacityVars) {
   for (auto& tensorVar : tensorVars) {
@@ -291,6 +310,9 @@ LowererImpl::lower(IndexStmt stmt, string name,
 
   // Create variables used for iterating and keeping track of fill regions
   createFillRegionVars(tensorVars, &fillRegionVars);
+
+  createTensorTypeMap(tensorVars, &tensorTypes);
+  createReverseTensorMap(tensorVars, &tensorExprMap);
 
   // Create iterators
   iterators = Iterators(stmt, tensorVars);
@@ -1293,8 +1315,10 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
   Stmt strideGuard = Stmt();
   Stmt boundsGuard = Stmt();
   if (provGraph.isCoordVariable(forall.getIndexVar())) {
+    Expr values = getValuesArrayFromIterator(iterator);
     Expr coordinateArray = iterator.posAccess(iterator.getPosVar(),
-                                              coordinates(iterator)).getResults()[0];
+                                              coordinates(iterator), values,
+                                              tensorTypes[iterator.getTensor()].getDataType()).getResults()[0];
     // If the iterator is windowed, we must recover the coordinate index
     // variable from the windowed space.
     if (iterator.isWindowed()) {
@@ -1390,6 +1414,15 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
 
 }
 
+ir::Expr LowererImpl::getValuesArrayFromIterator(Iterator iterator){
+  taco_iassert(util::contains(tensorExprMap, iterator.getTensor()));
+  Expr values = getValuesArray(tensorExprMap[iterator.getTensor()]);
+  if (iterator.getPosIterKind() == taco_positer_kind::BYTE){
+    values = ir::Cast::make(values, UInt8, true);
+  }
+  return values;
+}
+
 Stmt LowererImpl::lowerForallFusedPosition(Forall forall, Iterator iterator,
                                       vector<Iterator> locators,
                                       vector<Iterator> inserters,
@@ -1401,8 +1434,10 @@ Stmt LowererImpl::lowerForallFusedPosition(Forall forall, Iterator iterator,
   Expr coordinate = getCoordinateVar(forall.getIndexVar());
   Stmt declareCoordinate = Stmt();
   if (provGraph.isCoordVariable(forall.getIndexVar())) {
+    Expr values = getValuesArrayFromIterator(iterator);
     Expr coordinateArray = iterator.posAccess(iterator.getPosVar(),
-                                              coordinates(iterator)).getResults()[0];
+                                              coordinates(iterator), values,
+                                              tensorTypes[iterator.getTensor()].getDataType()).getResults()[0];
     declareCoordinate = VarDecl::make(coordinate, coordinateArray);
   }
 
@@ -1696,9 +1731,11 @@ Stmt LowererImpl::resolveCoordinate(std::vector<Iterator> mergers, ir::Expr coor
   if (mergers.size() == 1) {
     Iterator merger = mergers[0];
     if (merger.hasPosIter()) {
+      Expr values = getValuesArrayFromIterator(merger);
       // Just one position iterator so it is the resolved coordinate
       ModeFunction posAccess = merger.posAccess(merger.getPosVar(),
-                                                coordinates(merger));
+                                                coordinates(merger),
+                                                values, tensorTypes[merger.getTensor()].getDataType());
       auto access = posAccess[0];
       auto windowVarDecl = Stmt();
       auto stride = Stmt();
@@ -2823,6 +2860,12 @@ Expr LowererImpl::lowerAccess(Access access) {
     return true;
   }
 
+  if(getIterators(access).back().getPosIterKind() == taco_positer_kind::BYTE){
+    auto charVals = ir::Cast::make(vals, UInt8, true);
+    auto addr = Load::make(charVals, generateValueLocExpr(access), true);
+    return Load::make(ir::Cast::make(addr, access.getDataType(), true));
+  }
+
   return Load::make(vals, generateValueLocExpr(access));
 }
 
@@ -3448,7 +3491,9 @@ Stmt LowererImpl::declLocatePosVars(vector<Iterator> locators) {
           // The resulting value is where we should locate into the actual tensor.
           auto expr = coords[coords.size() - 1];
           auto indexSetIterator = locateIterator.getIndexSetIterator();
-          auto coordArray = indexSetIterator.posAccess(expr, coordinates(indexSetIterator)).getResults()[0];
+          Expr values = getValuesArrayFromIterator(locateIterator);
+          auto coordArray = indexSetIterator.posAccess(expr, coordinates(indexSetIterator), values,
+                                                       tensorTypes[locateIterator.getTensor()].getDataType()).getResults()[0];
           coords[coords.size() - 1] = coordArray;
         }
         ModeFunction locate = locateIterator.locate(coords);
@@ -3511,8 +3556,10 @@ Stmt LowererImpl::reduceDuplicateCoordinates(Expr coordinate,
     dedupStmts.push_back(addAssign(segendVar, 1));
     Stmt dedupBody = Block::make(dedupStmts);
 
+    // TODO: Cast to byte-array values
     ModeFunction posAccess = iterator.posAccess(segendVar,
-                                                coordinates(iterator));
+                                                coordinates(iterator),
+                                                tensorVals, tensorTypes[iterator.getTensor()].getDataType());
     // TODO: Support access functions that perform additional computations
     //       and/or might access invalid positions.
     taco_iassert(!posAccess.compute().defined());
@@ -3669,8 +3716,11 @@ Stmt LowererImpl::codeToIncIteratorVars(Expr coordinate, IndexVar coordinateVar,
   if (iterators.size() == 1) {
     Expr ivar = iterators[0].getIteratorVar();
 
+    Datatype type = tensorTypes[iterators[0].getTensor()].getDataType();
+    int increment = iterators[0].getPosIterKind() == taco_positer_kind::BYTE ? type.getNumBytes() : 1;
+
     if (iterators[0].isUnique()) {
-      return addAssign(ivar, 1);
+      return addAssign(ivar, increment);
     }
 
     // If iterator is over bottommost coordinate hierarchy level with
@@ -3713,12 +3763,15 @@ Stmt LowererImpl::codeToIncIteratorVars(Expr coordinate, IndexVar coordinateVar,
           result.push_back(ifstmt);
         }
       } else {
+        Datatype type = tensorTypes[iterator.getTensor()].getDataType();
+        int incrementVal = iterator.getPosIterKind() == taco_positer_kind::BYTE ? type.getNumBytes() : 1;
+
         Expr increment = iterator.isFull()
                          ? 1
                          : ir::Cast::make(Eq::make(iterator.getCoordVar(),
                                                    coordinate),
                                           ivar.type());
-        result.push_back(addAssign(ivar, increment));
+        result.push_back(addAssign(ivar, ir::Mul::make(increment, incrementVal)));
       }
     } else if (!iterator.isLeaf()) {
       result.push_back(Assign::make(ivar, iterator.getSegendVar()));
@@ -3748,35 +3801,51 @@ Stmt LowererImpl::codeToIncIteratorVars(Expr coordinate, IndexVar coordinateVar,
 Stmt LowererImpl::codeToUpdateFills(Expr coordinate, IndexVar coordinateVar, vector<Iterator> iterators, vector<Iterator> mergers) {
   vector<Stmt> result;
 
+//  std::cout << "COORDINATE "<< coordinate << std::endl;
+//  for (auto& merger : mergers) {
+//    std::cout << "merger: " <<  merger << std::endl;
+//    std::cout << "merger.getChild(): " << merger.getChild() << std::endl;
+//    std::cout << "merger.isRoot(): " << merger.isRoot() << std::endl;
+//  }
 
   for (auto& iterator : iterators) {
+//    std::cout << iterator << std::endl;
     if(iterator.updatesFillRegion()){
-      auto f = iterator.getFillRegion(iterator.getPosVar(), coordinates(iterator));
-      auto coord = iterator.posAccess(iterator.getPosVar(), coordinates(iterator))[0];
-
-      result.push_back(f.compute());
-
-      auto r = f.getResults();
-      taco_uassert(r.size() == 4);
-
-      auto start = r[0];
-      auto length = r[1];
-      auto run = r[2];
-      auto updateFill = ir::And::make(r[3], ir::Eq::make(coord, coordinate));
-
+//      auto f = iterator.getFillRegion(iterator.getPosVar(), coordinates(iterator));
+//      Expr values_ = getValuesArrayFromIterator(iterator);
+//      auto coord = iterator.posAccess(iterator.getPosVar(), coordinates(iterator),
+//                                      values_, tensorTypes[iterator.getTensor()].getDataType())[0];
+//
+//      result.push_back(f.compute());
+//
+//      auto r = f.getResults();
+//      taco_uassert(r.size() == 4);
+//
+//      auto start = r[0];
+//      auto length = r[1];
+//      auto run = r[2];
+//      auto updateFill = ir::And::make(r[3], ir::Eq::make(coord, coordinate));
+//
       auto fillRegion = GetProperty::make(iterator.getTensor(), TensorProperty::FillRegion);
-      auto values = GetProperty::make(iterator.getTensor(), TensorProperty::Values);
-
+//      auto values = GetProperty::make(iterator.getTensor(), TensorProperty::Values);
+//
       auto fillVars = getFillRegionVars(iterator.getTensor());
       auto lengthVar = fillVars[0];
       auto indexVar = fillVars[1];
-
-      auto body = Block::make(
-              Assign::make(lengthVar, length),
-              Assign::make(indexVar, 0),
-              Assign::make(fillRegion, Load::make(values, start, true))
-              );
-      result.push_back(IfThenElse::make(updateFill, body));
+//
+//      Stmt fillAssign = Assign::make(fillRegion, Load::make(values, start, true));
+//      if (iterator.getPosIterKind() == taco_positer_kind::BYTE){
+//        auto charVals = ir::Cast::make(values, UInt8, true);
+//        auto addr = Load::make(charVals, start, true);
+//        auto cast = ir::Cast::make(addr, tensorTypes[iterator.getTensor()].getDataType(), true);
+//        fillAssign = Assign::make(fillRegion, cast);
+//      }
+//
+//      auto body = Block::make(
+//              Assign::make(lengthVar, length),
+//              Assign::make(indexVar, 0),
+//              fillAssign);
+//      result.push_back(IfThenElse::make(updateFill, body));
 
       // We must also update the fill variable from the fill region
       auto fillVariable = GetProperty::make(iterator.getTensor(), TensorProperty::FillValue);
@@ -3796,10 +3865,40 @@ Stmt LowererImpl::codeToLoadCoordinatesFromPosIterators(vector<Iterator> iterato
     auto posIters = filter(iterators, [](Iterator it){return it.hasPosIter();});
     for (auto& posIter : posIters) {
       taco_tassert(posIter.hasPosIter());
+      Expr values = getValuesArrayFromIterator(posIter);
+      auto fillRegion = GetProperty::make(posIter.getTensor(), TensorProperty::FillRegion);
+      auto fillVariable = GetProperty::make(posIter.getTensor(), TensorProperty::FillValue);
+
       ModeFunction posAccess = posIter.posAccess(posIter.getPosVar(),
-                                                 coordinates(posIter));
+                                                 coordinates(posIter),
+                                                 values, tensorTypes[posIter.getTensor()].getDataType());
       loadPosIterCoordinateStmts.push_back(posAccess.compute());
       auto access = posAccess[0];
+      auto coordFound = posAccess[1];
+      if (posAccess.getResults().size() > 2){
+
+        auto fillRegionReplacement = posAccess[2];
+        auto length = posAccess[3];
+        auto updateFill = posAccess[4];
+
+
+        auto fillVars = getFillRegionVars(posIter.getTensor());
+        auto lengthVar = fillVars[0];
+        auto indexVar = fillVars[1];
+
+        auto body = Block::make(
+                Assign::make(lengthVar, length),
+                Assign::make(indexVar, 0),
+                Assign::make(fillRegion, fillRegionReplacement),
+                Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
+        loadPosIterCoordinateStmts.push_back(IfThenElse::make(updateFill, body));
+      }
+//      if (!(ir::isa<ir::Literal>(coordFound) && ir::to<ir::Literal>(coordFound)->getBoolValue()))
+//      {
+//        taco_iassert(posIter.isUnique()); // This check is from the single iterator logic in codeToIncIteratorVars
+//        auto coordLoop = While::make(ir::Neg::make(coordFound), Block::make(addAssign(posIter.getPosVar(), 1), posAccess.compute())); // TODO: Needs to search for coordinates
+//        loadPosIterCoordinateStmts.push_back(coordLoop);
+//      }
       // If this iterator is windowed, then it needs to be projected down to
       // recover the coordinate variable.
       // TODO (rohany): Would be cleaner to have this logic be moved into the
@@ -3824,8 +3923,7 @@ Stmt LowererImpl::codeToLoadCoordinatesFromPosIterators(vector<Iterator> iterato
       }
       if (declVars) {
         loadPosIterCoordinateStmts.push_back(VarDecl::make(posIter.getCoordVar(), access));
-      }
-      else {
+      } else {
         loadPosIterCoordinateStmts.push_back(Assign::make(posIter.getCoordVar(), access));
       }
       if (posIter.isWindowed()) {

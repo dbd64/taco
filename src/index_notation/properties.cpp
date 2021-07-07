@@ -76,7 +76,7 @@ IndexExpr Annihilator::annihilates(const std::vector<IndexExpr>& exprs) const {
   for(const auto& idx : pos) {
     taco_uassert(idx < (int)exprs.size()) << "Not enough args in expression";
     if(::taco::equals(exprs[idx], a)) {
-      return a;
+      return std::move(a);
     }
   }
 
@@ -146,7 +146,7 @@ IndexExpr Identity::simplify(const std::vector<IndexExpr>& exprs) const {
 
   if(identityTermsChecked == exprs.size()) {
     // If we checked every expression and
-    return identityVal;
+    return std::move(identityVal);
   }
 
   return IndexExpr();

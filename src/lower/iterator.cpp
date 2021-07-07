@@ -281,6 +281,13 @@ bool Iterator::hasAppendFillRegion() const {
   return getMode().defined() && getMode().getModeFormat().hasAppendFillRegion();
 }
 
+taco_positer_kind Iterator::getPosIterKind() const {
+  taco_iassert(defined());
+  if (isDimensionIterator()) return taco_positer_kind::NONE;
+  return getMode().defined() ? getMode().getModeFormat().getPosIterKind() : taco_positer_kind::NONE;
+}
+
+
 ModeFunction Iterator::coordBounds(const std::vector<ir::Expr>& coords) const {
   taco_iassert(defined() && content->mode.defined());
   return getMode().getModeFormat().impl->coordIterBounds(coords, getMode());
@@ -303,9 +310,10 @@ ModeFunction Iterator::posBounds(const ir::Expr& parentPos) const {
 }
 
 ModeFunction Iterator::posAccess(const ir::Expr& pos, 
-                                 const std::vector<ir::Expr>& coords) const {
+                                 const std::vector<ir::Expr>& coords,
+                                 const ir::Expr& values, Datatype type) const {
   taco_iassert(defined() && content->mode.defined());
-  return getMode().getModeFormat().impl->posIterAccess(pos, coords, getMode());
+  return getMode().getModeFormat().impl->posIterAccess(pos, coords, values, type, getMode());
 }
 
 ModeFunction Iterator::locate(const std::vector<ir::Expr>& coords) const {

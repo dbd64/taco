@@ -189,12 +189,8 @@ TensorStorage::operator struct taco_tensor_t*() const {
       // taco_iassert(modeIndex.numIndexArrays() == 2)
       //     << modeIndex.numIndexArrays();
       if (modeIndex.numIndexArrays() > 0) {
-        const Array& runs = modeIndex.getIndexArray(2);
-        const Array& dist = modeIndex.getIndexArray(1);
         const Array& pos = modeIndex.getIndexArray(0);
         tensorData->indices[i][0] = (uint8_t*)pos.getData();
-        tensorData->indices[i][1] = (uint8_t*)dist.getData();
-        tensorData->indices[i][2] = (uint8_t*)runs.getData();
       }
     }
     else {

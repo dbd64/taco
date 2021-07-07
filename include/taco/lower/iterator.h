@@ -9,6 +9,7 @@
 #include <map>
 
 #include "taco/ir/ir.h"
+#include "taco/format.h"
 #include "taco/util/comparable.h"
 
 namespace taco {
@@ -83,7 +84,9 @@ public:
   bool updatesFillRegion() const;
   bool hasAppendFillRegion() const;
 
-  /// Attributes of ungrouped insertion level functions.
+  taco_positer_kind getPosIterKind() const;
+
+    /// Attributes of ungrouped insertion level functions.
   bool hasSeqInsertEdge() const;
   bool hasInsertCoord() const;
   bool isYieldPosPure() const;
@@ -142,7 +145,8 @@ public:
   /// iteration.
   ModeFunction posBounds(const ir::Expr& parentPos) const;
   ModeFunction posAccess(const ir::Expr& pos, 
-                         const std::vector<ir::Expr>& coords) const;
+                         const std::vector<ir::Expr>& coords,
+                         const ir::Expr& values, Datatype type) const;
   
   /// Returns code for level function that implements locate capability.
   ModeFunction locate(const std::vector<ir::Expr>& coords) const;

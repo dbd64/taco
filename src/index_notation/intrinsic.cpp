@@ -1595,11 +1595,17 @@ ir::Expr FillVariableIntrinsic::lower(const std::vector<ir::Expr>& args) const {
   taco_iassert(args.size() == 1);
   ir::Expr a = args[0];
   const ir::Load* l;
+  const ir::Cast* c;
   if((l = a.as<ir::Load>()) && l->arr.as<ir::GetProperty>()){
     a = l->arr.as<ir::GetProperty>()->tensor;
   } else if (auto gp = a.as<ir::GetProperty>()) {
     a = gp->tensor;
+  } else if ((l = a.as<ir::Load>()) && (c = l->arr.as<ir::Cast>()) &&
+             (l = c->a.as<ir::Load>()) && (c = l->arr.as<ir::Cast>()) &&
+             c->a.as<ir::GetProperty>()) {
+    a = c->a.as<ir::GetProperty>()->tensor;
   } else {
+    std::cout << "args[0]: " << args[0] << std::endl;
     taco_not_supported_yet;
   }
   return ir::GetProperty::make(a, ir::TensorProperty::FillValue);

@@ -309,6 +309,10 @@ bool ModeFormat::hasAppendFillRegion() const {
   return impl->hasAppendFillRegion;
 }
 
+taco_positer_kind ModeFormat::getPosIterKind() const {
+  taco_iassert(defined());
+  return impl->positer_kind;
+}
 
 std::vector<AttrQuery> ModeFormat::getAttrQueries(
     std::vector<IndexVar> parentCoords, 
