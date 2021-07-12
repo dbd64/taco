@@ -81,8 +81,9 @@ ModeFunction SingletonModeFormat::posIterAccess(ir::Expr pos,
   return ModeFunction(Stmt(), {idx, true});
 }
 
-Stmt SingletonModeFormat::getAppendCoord(Expr pos, Expr coord, 
-                                         Mode mode) const {
+Stmt SingletonModeFormat::getAppendCoord(Expr pos, Expr coord,
+                                         Expr values, Expr valuesCap,
+                                         Datatype type, Mode mode) const {
   Expr idxArray = getCoordArray(mode.getModePack());
   Expr stride = (int)mode.getModePack().getNumModes();
   Expr offset = (int)mode.getPackLocation();

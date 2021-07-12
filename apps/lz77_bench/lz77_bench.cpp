@@ -6,6 +6,8 @@
 
 #include <random>
 #include <variant>
+#include <climits>
+#include <limits>
 
 using namespace taco;
 
@@ -13,6 +15,10 @@ using namespace taco;
 #define SEED 0
 #endif
 std::default_random_engine gen(SEED);
+
+#ifndef TENSOR_TYPE
+#define TENSOR_TYPE double
+#endif
 
 const Format dv({Dense});
 const Format lz77f({LZ77});
@@ -50,12 +56,18 @@ void push_back(T arg, std::vector<uint8_t>& bytes, bool check = false){
 template <typename T>
 std::pair<std::vector<T>, int> packLZ77(std::vector<TempValue<T>> vals){
   std::vector<uint8_t> bytes;
+  int numValueBytes = 0;
+  int numOtherBytes = 0;
   for (auto& val : vals){
     std::visit(overloaded {
-            [&](T arg) { push_back(arg, bytes, true); },
+            [&](T arg) {
+                push_back(arg, bytes, true);
+                numValueBytes+= sizeof(T);
+              },
             [&](std::pair<uint16_t, uint16_t> arg) {
                 bytes.push_back(0x3 << 6);
                 push_back(arg.first, bytes); push_back(arg.second, bytes);
+                numOtherBytes+=5;
             }
     }, val);
   }
@@ -113,31 +125,42 @@ Func getPlusFunc(){
 }
 
 template <typename T = uint8_t>
-Tensor<T>
+std::pair<Tensor<T>, std::vector<int>>
 gen_random_lz77(std::string name, int size, double uncompressed_threshold,
                 int lower_dist, int upper_dist,
                 int lower_runs, int upper_runs,
                 int lower_vals, int upper_vals) {
   std::uniform_int_distribution<int> unif_dist(lower_dist, upper_dist);
   std::uniform_int_distribution<int> unif_runs(lower_runs, upper_runs);
-  std::uniform_int_distribution<int> unif_vals(lower_vals, upper_vals);
+  std::uniform_real_distribution<int> unif_vals(lower_vals, upper_vals);
   std::uniform_real_distribution<double> unif_compressed(0,1);
 
   std::vector<TempValue<T>> vals;
-  int numRawValues = 1;
-  vals.push_back((T) unif_vals(gen));
 
+//  int numRemaining = size-1;
+//  while (numRemaining > 0) {
+//    int run = std::min(USHRT_MAX, numRemaining-1);
+//    vals.push_back((T) unif_vals(gen));
+//    vals.push_back(Repeat{1, run});
+//    numRemaining -= (run+1);
+//  }
+
+  int numRawValues = 1;
+  int numRawPrevVals = 1;
+  vals.push_back((T) unif_vals(gen));
   int numRemaining = size-2;
   while(numRemaining > 0){
-    if (unif_compressed(gen) > uncompressed_threshold && numRemaining > 1) {
+    if (unif_compressed(gen) > uncompressed_threshold && numRemaining > 1 && numRawPrevVals > 0) {
       auto run = std::min(unif_runs(gen), numRemaining-1);
-      auto dist_v = std::min(unif_dist(gen), numRawValues);
-      if (run == 0) dist_v = 0;
+      auto dist_v = std::min(unif_dist(gen), numRawPrevVals);
+      if (run == 0) continue;
       vals.push_back(Repeat{dist_v,run});
+      numRawPrevVals = 0;
       numRemaining -= run;
     } else {
       vals.push_back((T) unif_vals(gen));
       numRawValues += 1;
+      numRawPrevVals += 1;
       numRemaining -= 1;
     }
   }
@@ -146,15 +169,19 @@ gen_random_lz77(std::string name, int size, double uncompressed_threshold,
   numRawValues += 1;
 
   auto packed = packLZ77<T>(vals);
-  return makeLZ77<T>("lz77_"+name, {size}, {0, packed.second}, packed.first);
+
+  std::vector<int> data;
+  data.push_back(packed.second);
+  data.push_back(numRawValues);
+  return {makeLZ77<T>("lz77_"+name, {size}, {0, packed.second}, packed.first), data};
 }
 
-constexpr int size_lower = 100'000'000;
+constexpr int size_lower = 1'000;
 constexpr int size_upper = 100'000'000;
 constexpr int size_mult  = 10;
-constexpr int run_lower = 100'000;
-constexpr int run_upper = 100'000; //1'000'000;
-constexpr int run_mult  = 10;
+constexpr int run_lower = 4;
+constexpr int run_upper = 65'536; //1'000'000;
+constexpr int run_mult  = 2;
 
 int numRandTensors = 0;
 constexpr int minElements = 10'000'000;
@@ -162,35 +189,37 @@ constexpr int minElements = 10'000'000;
 static void CustomArguments(benchmark::internal::Benchmark *b) {
   for (int size = size_lower; size <= size_upper; size *= size_mult) { // Size of vector
     for (int run = run_lower; run <= run_upper; run *= run_mult) {
+      run = std::min(run, USHRT_MAX);
       b->Args({size, 0, run, true});
-      for (int thresh = 0; thresh <= 10; thresh += 15) {
+      for (int thresh = 0; thresh <= 10; thresh += 5) {
         b->Args({size, thresh, run, false});
       }
     }
   }
 }
 
-static std::pair<Tensor<uint8_t>, Tensor<uint8_t>> getDense(Tensor<uint8_t> d0, Tensor<uint8_t> d1, int tsize){
-  Tensor<uint8_t> t0("t0_d", {tsize},   dv, 0);
-  Tensor<uint8_t> t1("t1_d", {tsize},   dv, 0);
-  const IndexVar i("i");
-  auto copy = getCopyFunc();
+//static std::pair<Tensor<uint8_t>, Tensor<uint8_t>> getDense(Tensor<uint8_t> d0, Tensor<uint8_t> d1, int tsize){
+//  Tensor<uint8_t> t0("t0_d", {tsize},   dv, 0);
+//  Tensor<uint8_t> t1("t1_d", {tsize},   dv, 0);
+//  const IndexVar i("i");
+//  auto copy = getCopyFunc();
+//
+//  t0(i) = copy(d0(i));
+//  t0.setAssembleWhileCompute(true);
+//  t0.compile();
+//  t0.compute();
+//  d0 = t0;
+//
+//  t1(i) = copy(d1(i));
+//  t1.setAssembleWhileCompute(true);
+//  t1.compile();
+//  t1.compute();
+//  d1 = t1;
+//
+//  return {t0, t1};
+//}
 
-  t0(i) = copy(d0(i));
-  t0.setAssembleWhileCompute(true);
-  t0.compile();
-  t0.compute();
-  d0 = t0;
-
-  t1(i) = copy(d1(i));
-  t1.setAssembleWhileCompute(true);
-  t1.compile();
-  t1.compute();
-  d1 = t1;
-
-}
-
-static void shim_compute(Tensor<uint8_t> t){
+static void shim_compute(Tensor<TENSOR_TYPE> t){
   t.compute();
 }
 
@@ -198,16 +227,20 @@ static void BM_all(benchmark::State &state) {
   int tsize = state.range(0);
   double thresh = state.range(1)/10.0;
   int run_upper = state.range(2);
+  int run_lower = std::max(1, run_upper-100);
   bool isDense = state.range(3);
   auto plus_ = getPlusFunc();
   auto copy = getCopyFunc();
 
-  auto d0 = gen_random_lz77("t0", tsize, thresh, 1, 50, run_upper-100, run_upper, 0, 255);
-  auto d1 = gen_random_lz77("t1", tsize, thresh, 1, 50, run_upper-100, run_upper, 0, 255);
+  auto vals_lower = std::numeric_limits<TENSOR_TYPE>::min();
+  auto vals_upper = std::numeric_limits<TENSOR_TYPE>::max();
+
+  auto [d0, v0] = gen_random_lz77<TENSOR_TYPE>("t0", tsize, thresh, 1, 50, run_lower, run_upper, vals_lower, vals_upper);
+  auto [d1, v1] = gen_random_lz77<TENSOR_TYPE>("t1", tsize, thresh, 1, 50, run_lower, run_upper, vals_lower, vals_upper);
 
   if (isDense){
-    Tensor<uint8_t> t0("t0_d", {tsize},   dv, 0);
-    Tensor<uint8_t> t1("t1_d", {tsize},   dv, 0);
+    Tensor<TENSOR_TYPE> t0("t0_d", {tsize},   dv, 0);
+    Tensor<TENSOR_TYPE> t1("t1_d", {tsize},   dv, 0);
     const IndexVar i("i");
 
     t0(i) = copy(d0(i));
@@ -225,7 +258,7 @@ static void BM_all(benchmark::State &state) {
 
   for (auto _ : state) {
     state.PauseTiming();
-    Tensor<uint8_t> expected("expected_", {tsize}, dv); //isDense ? dv : lz77f);
+    Tensor<TENSOR_TYPE> expected("expected_", {tsize}, isDense ? dv : lz77f);
     const IndexVar i("i");
     expected(i) = plus_(d0(i), d1(i));
     expected.setAssembleWhileCompute(true);
@@ -234,6 +267,8 @@ static void BM_all(benchmark::State &state) {
 
     expected.compute();
   }
+
+  state.counters.insert({{"d0_bytes", v0[0]}, {"d1_bytes", v1[0]}, {"d0_raw_vals", v0[1]}, {"d1_raw_vals", v1[1]}});
 }
 
 BENCHMARK(BM_all)->Apply(CustomArguments)\

@@ -162,7 +162,8 @@ public:
       const ir::Expr& sz) const;
   
   /// Return code for level functions that implement append capabilitiy.
-  ir::Stmt getAppendCoord(const ir::Expr& p, const ir::Expr& i) const; 
+  ir::Stmt getAppendCoord(const ir::Expr& p, const ir::Expr& i, const ir::Expr& values,
+                          const ir::Expr& valuesCap, const Datatype& type) const;
   ir::Stmt getAppendEdges(const ir::Expr& pPrev, const ir::Expr& pBegin, 
       const ir::Expr& pEnd) const;
   ir::Expr getSize(const ir::Expr& szPrev) const;
@@ -195,7 +196,8 @@ public:
 
   ir::Stmt getFillRegionAppend(const ir::Expr& p, const ir::Expr& i,
                                const ir::Expr& start, const ir::Expr& length,
-                               const ir::Expr& run) const;
+                               const ir::Expr& run, const ir::Expr& values,
+                               const Datatype& type) const;
 
 
     /// Returns true if the iterator is defined, false otherwise.

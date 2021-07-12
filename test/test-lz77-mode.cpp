@@ -5,6 +5,7 @@
 
 #include <limits>
 #include <random>
+#include <variant>
 
 using namespace taco;
 
@@ -13,81 +14,112 @@ const Format lz77f({LZ77});
 
 const IndexVar i("i");
 
-Index makeLZ77Index(const std::vector<int>& rowptr, const std::vector<int>& dist,
-                    const std::vector<int>& runs) {
-  return Index(lz77f,
-               {ModeIndex({makeArray(rowptr), makeArray(dist), makeArray(runs)})});
+template <typename T>
+union GetBytes {
+    T value;
+    uint8_t bytes[sizeof(T)];
+};
+
+using Repeat = std::pair<uint16_t, uint16_t>;
+
+template <class T>
+using TempValue = std::variant<T,Repeat>;
+
+// helper type for the visitor #4
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+// explicit deduction guide (not needed as of C++20)
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+template <typename T>
+void push_back(T arg, std::vector<uint8_t>& bytes, bool check = false){
+  GetBytes<T> gb;
+  gb.value = arg;
+
+  if(check && ((gb.bytes[0] >> 7) & 0x1) == 1){
+    bytes.push_back(1 << 7);
+  }
+
+  for (unsigned long i_=0; i_<sizeof(T); i_++){
+    bytes.push_back(gb.bytes[i_]);
+  }
 }
 
+template <typename T>
+std::pair<std::vector<uint8_t>, int> packLZ77(std::vector<TempValue<T>> vals){
+  std::vector<uint8_t> bytes;
+  for (auto& val : vals){
+    std::visit(overloaded {
+            [&](T arg) { push_back(arg, bytes, true); },
+            [&](std::pair<uint16_t, uint16_t> arg) {
+                bytes.push_back(0x3 << 6);
+                push_back(arg.first, bytes); push_back(arg.second, bytes);
+            }
+    }, val);
+  }
+
+  return {bytes, bytes.size()};
+//  int size = bytes.size();
+//  while(bytes.size() % sizeof(T) != 0){
+//    bytes.push_back(0);
+//  }
+//  T* bytes_data = (T*) bytes.data();
+//  std::vector<T> values(bytes_data, bytes_data + (bytes.size() / sizeof(T)));
+//
+//  return {values, size};
+}
+
+Index makeLZ77Index(const std::vector<int>& rowptr) {
+  return Index(lz77f,
+               {ModeIndex({makeArray(rowptr)})});
+}
+
+/// Factory function to construct a compressed sparse row (CSR) matrix.
 template<typename T>
 TensorBase makeLZ77(const std::string& name, const std::vector<int>& dimensions,
-                    const std::vector<int>& pos,
-                    const std::vector<int>& dist,
-                    const std::vector<int>& runs,
-                    const std::vector<T>& vals) {
+                    const std::vector<int>& pos, const std::vector<uint8_t>& vals) {
   taco_uassert(dimensions.size() == 1);
   Tensor<T> tensor(name, dimensions, {LZ77});
   auto storage = tensor.getStorage();
-  storage.setIndex(makeLZ77Index(pos, dist, runs));
+  storage.setIndex(makeLZ77Index(pos));
   storage.setValues(makeArray(vals));
   tensor.setStorage(storage);
   return std::move(tensor);
 }
 
 Tensor<double> lz77_zeros(std::string name) {
-  return makeLZ77<double>(name, {11},
-                          {0, 11},
-                          {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0  },
-                          {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0  },
-                          {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0});
+  auto packed = packLZ77<double>({0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
 Tensor<double> lz77_one_rle(std::string name, double val) {
-  return makeLZ77<double>(name, {11},
-                          {0, 2},
-                          {1,  0  },
-                          {9,  0  },
-                          {val,0.0});
+  auto packed = packLZ77<double>({val,Repeat{1,9},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
+
 Tensor<double> lz77_two_repeat(std::string name, double val1, double val2) {
-  return makeLZ77<double>(name, {11},
-                          {0, 3},
-                          {0,   2,   0  },
-                          {0,   8,   0  },
-                          {val1,val2,0.0});
+  auto packed = packLZ77<double>({val1,val2,Repeat{2,8},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
 Tensor<double> lz77_repeat_twice(std::string name, double val1, double val2) {
-  return makeLZ77<double>(name, {11},
-                          {0, 3},
-                          {1,   2,   0  },
-                          {4,   4,   0  },
-                          {val1,val2,0.0});
+  auto packed = packLZ77<double>({val1,Repeat{1,3},val1,val2,Repeat{2,4},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
 Tensor<double> lz77_three_repeat(std::string name, double val1, double val2, double val3) {
-  return makeLZ77<double>(name, {11},
-                          {0, 4},
-                          {0,   0,   3,  0   },
-                          {0,   0,   7,  0   },
-                          {val1,val2,val3,0.0});
+  auto packed = packLZ77<double>({val1,val2,val3,Repeat{3,7},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
 Tensor<double> lz77_1(std::string name) {
-  return makeLZ77<double>(name, {11},
-                          {0, 7},
-                          {0,  0,  1,  0,  0,  3,  0  },
-                          {0,  0,  3,  0,  0,  1,  0  },
-                          {0.0,1.0,2.0,3.0,4.0,5.0,0.0});
+  auto packed = packLZ77<double>({0.0,1.0,2.0,Repeat{1,3},3.0,4.0,5.0,Repeat{3,1},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
 Tensor<double> lz77_2(std::string name) {
-  return makeLZ77<double>(name, {11},
-                          {0, 7},
-                          {0,  0,  1,  0,  0,  3,  0  },
-                          {0,  0,  2,  0,  0,  2,  0  },
-                          {0.0,1.0,2.0,3.0,4.0,5.0,0.0});
+  auto packed = packLZ77<double>({0.0,1.0,2.0,Repeat{1,2},3.0,4.0,5.0,Repeat{3,2},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
 //std::default_random_engine gen(0);
@@ -178,6 +210,38 @@ Func getPlusFunc(){
   };
   Func plus_("plus_", plusFunc, algFunc);
   return plus_;
+}
+
+TEST(lz77_mode, test_values) {
+  Func copy = getCopyFunc();
+  Func plus_ = getPlusFunc();
+
+  Tensor<double> A("A", {11}, dv, 0);
+  Tensor<double> B = lz77_two_repeat("B", 1,2);
+
+  A(i) = copy(B(i));
+  A.setAssembleWhileCompute(true);
+  A.compile();
+  A.compute();
+
+  Tensor<double> result("A", {11}, dv, 0);
+  result(0) = 1;
+  result(1) = 2;
+  result(2) = 1;
+  result(3) = 2;
+  result(4) = 1;
+  result(5) = 2;
+  result(6) = 1;
+  result(7) = 2;
+  result(8) = 1;
+  result(9) = 2;
+  result(10) = 0;
+
+
+  SCOPED_TRACE(string("A: ") + util::toString(A));
+  SCOPED_TRACE(string("B: ") + util::toString(B));
+
+  ASSERT_TENSOR_EQ(A, result);
 }
 
 TEST(lz77_mode, test_zeros) {
@@ -323,6 +387,10 @@ TEST(lz77_mode, test_repeat_two) {
 
   SCOPED_TRACE(string("C_: ") + util::toString(C_));
   SCOPED_TRACE(string("B_: ") + util::toString(B_));
+
+  std::stringstream sstream;
+  A.printComputeIR(sstream);
+  SCOPED_TRACE(string("Compute code: \n") + sstream.str());
 
   ASSERT_TENSOR_EQ(A_, result);
 }

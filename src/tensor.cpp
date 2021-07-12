@@ -272,6 +272,8 @@ static size_t unpackTensorData(const taco_tensor_t& tensorData,
   auto storage = tensor.getStorage();
   auto format = storage.getFormat();
 
+  bool byteVals = false;
+
   vector<ModeIndex> modeIndices;
   size_t numVals = 1;
   for (int i = 0; i < tensor.getOrder(); i++) {
@@ -290,16 +292,17 @@ static size_t unpackTensorData(const taco_tensor_t& tensorData,
       Array idx = Array(type<int>(), tensorData.indices[i][1], numVals, Array::UserOwns);
       modeIndices.push_back(ModeIndex({makeArray(type<int>(), 0), idx}));
     } else if (modeType.getName() == LZ77.getName()) {
+//      byteVals = true;
       auto size = ((int*)tensorData.indices[i][0])[numVals];
       Array pos = Array(type<int>(), tensorData.indices[i][0], numVals+1, Array::UserOwns);
       modeIndices.push_back(ModeIndex({pos}));
-      numVals = size;
+      numVals = (size/tensor.getComponentType().getNumBytes()) + 1;
     } else {
       taco_not_supported_yet;
     }
   }
   storage.setIndex(Index(format, modeIndices));
-  storage.setValues(Array(tensor.getComponentType(), tensorData.vals, numVals));
+  storage.setValues(Array(byteVals ? UInt8 : tensor.getComponentType(), tensorData.vals, numVals));
   return numVals;
 }
 

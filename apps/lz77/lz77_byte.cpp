@@ -95,46 +95,32 @@ Tensor<double> lz77_one_rle(std::string name, double val) {
   return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
 }
 
-//Tensor<double> lz77_two_repeat(std::string name, double val1, double val2) {
-//  return makeLZ77<double>(name, {11},
-//                          {0, 3},
-//                          {0,   2,   0  },
-//                          {0,   8,   0  },
-//                          {val1,val2,0.0});
-//}
-//
-//Tensor<double> lz77_repeat_twice(std::string name, double val1, double val2) {
-//  return makeLZ77<double>(name, {11},
-//                          {0, 3},
-//                          {1,   2,   0  },
-//                          {4,   4,   0  },
-//                          {val1,val2,0.0});
-//}
-//
-//Tensor<double> lz77_three_repeat(std::string name, double val1, double val2, double val3) {
-//  return makeLZ77<double>(name, {11},
-//                          {0, 4},
-//                          {0,   0,   3,  0  },
-//                          {0,   0,   7,  0  },
-//                          {val1,val2,val3,0.0});
-//}
-//
-//Tensor<double> lz77_1(std::string name) {
-//  return makeLZ77<double>(name, {11},
-//                          {0, 7},
-//                          {0,  0,  1,  0,  0,  3,  0  },
-//                          {0,  0,  3,  0,  0,  1,  0  },
-//                          {0.0,1.0,2.0,3.0,4.0,5.0,0.0});
-//}
-//
-//Tensor<double> lz77_2(std::string name) {
-//  return makeLZ77<double>(name, {11},
-//                          {0, 7},
-//                          {0,  0,  1,  0,  0,  3,  0  },
-//                          {0,  0,  2,  0,  0,  2,  0  },
-//                          {0.0,1.0,2.0,3.0,4.0,5.0,0.0});
-//}
-//
+
+Tensor<double> lz77_two_repeat(std::string name, double val1, double val2) {
+  auto packed = packLZ77<double>({val1,val2,Repeat{2,8},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
+}
+
+Tensor<double> lz77_repeat_twice(std::string name, double val1, double val2) {
+  auto packed = packLZ77<double>({val1,Repeat{1,3},val1,val2,Repeat{2,4},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
+}
+
+Tensor<double> lz77_three_repeat(std::string name, double val1, double val2, double val3) {
+  auto packed = packLZ77<double>({val1,val2,val3,Repeat{3,7},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
+}
+
+Tensor<double> lz77_1(std::string name) {
+  auto packed = packLZ77<double>({0.0,1.0,2.0,Repeat{1,3},3.0,4.0,5.0,Repeat{3,1},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
+}
+
+Tensor<double> lz77_2(std::string name) {
+  auto packed = packLZ77<double>({0.0,1.0,2.0,Repeat{1,2},3.0,4.0,5.0,Repeat{3,2},0.0});
+  return makeLZ77<double>(name, {11}, {0, packed.second}, packed.first);
+}
+
 std::default_random_engine gen(0);
 
 Func getCopyFunc(){
@@ -218,9 +204,61 @@ int test_one_rle() {
   Func copy = getCopyFunc();
   Func plus_ = getPlusFunc();
 
-  Tensor<double> A("A", {11}, dv, 0);
+  Tensor<double> A("A", {11}, lz77f, 0);
   Tensor<double> B = lz77_one_rle("B", 5);
   Tensor<double> C = lz77_one_rle("C", 7);
+  Tensor<double> result("result", {11}, dv, 0);
+
+  A(i) = plus_(B(i), C(i));
+  A.setAssembleWhileCompute(true);
+  A.compile();
+  A.printComputeIR(std::cout);
+  A.compute();
+
+  result(i) = copy(A(i));
+  result.setAssembleWhileCompute(true);
+  result.compile();
+  result.compute();
+
+  Tensor<double> A_("dA", {11},   dv, 0);
+  Tensor<double> B_("dB", {11},   dv, 0);
+  Tensor<double> C_("dC", {11},   dv, 0);
+
+  B_(i) = copy(B(i));
+  B_.setAssembleWhileCompute(true);
+  B_.compile();
+  B_.compute();
+
+  C_(i) = copy(C(i));
+  C_.setAssembleWhileCompute(true);
+  C_.compile();
+  C_.compute();
+
+  A_(i) = B_(i) + C_(i);
+
+  A_.setAssembleWhileCompute(true);
+  A_.compile();
+  A_.compute();
+
+  std::cout << B << std::endl;
+  std::cout << C << std::endl << std::endl;
+
+  std::cout << B_ << std::endl;
+  std::cout << C_ << std::endl << std::endl;
+
+  std::cout << A << std::endl;
+  std::cout << A_ << std::endl;
+  std::cout << result << std::endl;
+  return 0;
+}
+
+int test_repeat_two() {
+  Func copy = getCopyFunc();
+  Func plus_ = getPlusFunc();
+
+  Tensor<double> A("A", {11}, lz77f, 0);
+  Tensor<double> B = lz77_two_repeat("B", 1,2);
+  Tensor<double> C = lz77_two_repeat("C", 3,4);
   Tensor<double> result("result", {11}, dv, 0);
 
   A(i) = plus_(B(i), C(i));
@@ -265,220 +303,174 @@ int test_one_rle() {
   return 0;
 }
 
-//int test_repeat_two() {
-//  Func copy = getCopyFunc();
-//  Func plus_ = getPlusFunc();
-//
-//  Tensor<double> A("A", {11}, lz77f, 0);
-//  Tensor<double> B = lz77_two_repeat("B", 1,2);
-//  Tensor<double> C = lz77_two_repeat("C", 3,4);
-//  Tensor<double> result("result", {11}, dv, 0);
-//
-//  A(i) = plus_(B(i), C(i));
-//  A.setAssembleWhileCompute(true);
-//  A.compile();
-//  A.compute();
-//
-//  result(i) = copy(A(i));
-//  result.setAssembleWhileCompute(true);
-//  result.compile();
-//  result.compute();
-//
-//  Tensor<double> A_("dA", {11},   dv, 0);
-//  Tensor<double> B_("dB", {11},   dv, 0);
-//  Tensor<double> C_("dC", {11},   dv, 0);
-//
-//  B_(i) = copy(B(i));
-//  B_.setAssembleWhileCompute(true);
-//  B_.compile();
-//  B_.compute();
-//
-//  C_(i) = copy(C(i));
-//  C_.setAssembleWhileCompute(true);
-//  C_.compile();
-//  C_.compute();
-//
-//  A_(i) = B_(i) + C_(i);
-//
-//  A_.setAssembleWhileCompute(true);
-//  A_.compile();
-//  A_.compute();
-//
-//  std::cout << B << std::endl;
-//  std::cout << C << std::endl << std::endl;
-//
-//  std::cout << B_ << std::endl;
-//  std::cout << C_ << std::endl << std::endl;
-//
-//  std::cout << A << std::endl;
-//  std::cout << A_ << std::endl;
-//  std::cout << result << std::endl;
-//  return 0;
-//}
-//
-//int test_mixed_two_three() {
-//  Func copy = getCopyFunc();
-//  Func plus_ = getPlusFunc();
-//
-//  Tensor<double> A("A", {11}, lz77f, 0);
-//  Tensor<double> B = lz77_two_repeat("B", 1,2);
-//  Tensor<double> C = lz77_three_repeat("C", 3,4,5);
-//  Tensor<double> result("result", {11}, dv, 0);
-//
-//  A(i) = plus_(B(i), C(i));
-//  A.setAssembleWhileCompute(true);
-//  A.compile();
-//  A.compute();
-//
-//  result(i) = copy(A(i));
-//  result.setAssembleWhileCompute(true);
-//  result.compile();
-//  result.compute();
-//
-//  Tensor<double> A_("dA", {11},   dv, 0);
-//  Tensor<double> B_("dB", {11},   dv, 0);
-//  Tensor<double> C_("dC", {11},   dv, 0);
-//
-//  B_(i) = copy(B(i));
-//  B_.setAssembleWhileCompute(true);
-//  B_.compile();
-//  B_.compute();
-//
-//  C_(i) = copy(C(i));
-//  C_.setAssembleWhileCompute(true);
-//  C_.compile();
-//  C_.compute();
-//
-//  A_(i) = B_(i) + C_(i);
-//
-//  A_.setAssembleWhileCompute(true);
-//  A_.compile();
-//  A_.compute();
-//
-//  std::cout << B << std::endl;
-//  std::cout << C << std::endl << std::endl;
-//
-//  std::cout << B_ << std::endl;
-//  std::cout << C_ << std::endl << std::endl;
-//
-//  std::cout << A << std::endl;
-//  std::cout << A_ << std::endl;
-//  std::cout << result << std::endl;
-//  return 0;
-//}
-//
-//int test_mixed() {
-//  Func copy = getCopyFunc();
-//  Func plus_ = getPlusFunc();
-//
-//  Tensor<double> A("A", {11}, lz77f, 0);
-//  Tensor<double> B = lz77_repeat_twice("B", 1,2);
-//  Tensor<double> C = lz77_three_repeat("C", 3,4,5);
-//  Tensor<double> result("result", {11}, dv, 0);
-//
-//  A(i) = plus_(B(i), C(i));
-//  A.setAssembleWhileCompute(true);
-//  A.compile();
-//  A.compute();
-//
-//  result(i) = copy(A(i));
-//  result.setAssembleWhileCompute(true);
-//  result.compile();
-//  result.compute();
-//
-//  Tensor<double> A_("dA", {11},   dv, 0);
-//  Tensor<double> B_("dB", {11},   dv, 0);
-//  Tensor<double> C_("dC", {11},   dv, 0);
-//
-//  B_(i) = copy(B(i));
-//  B_.setAssembleWhileCompute(true);
-//  B_.compile();
-//  B_.compute();
-//
-//  C_(i) = copy(C(i));
-//  C_.setAssembleWhileCompute(true);
-//  C_.compile();
-//  C_.compute();
-//
-//  A_(i) = B_(i) + C_(i);
-//
-//  A_.setAssembleWhileCompute(true);
-//  A_.compile();
-//  A_.compute();
-//
-//  std::cout << B << std::endl;
-//  std::cout << C << std::endl << std::endl;
-//
-//  std::cout << B_ << std::endl;
-//  std::cout << C_ << std::endl << std::endl;
-//
-//  std::cout << A << std::endl;
-//  std::cout << A_ << std::endl;
-//  std::cout << result << std::endl;
-//  return 0;
-//}
-//
-//void test_repeat_two_csr() {
-//  Func copy = getCopyFunc();
-//  Func plus_ = getPlusFunc();
-//
-//  Tensor<double> A("A", {11}, lz77f, 0);
-//  Tensor<double> B = lz77_two_repeat("B", 1,2);
-//  Tensor<double> C("C", {11}, {Compressed}, 0);
-//  Tensor<double> result("result", {11}, dv, 0);
-//
-//  C(0) = 1;
-//  C(5) = 2;
-//  C(9) = 5;
-//  C(10) = 0;
-//
-//  A(i) = plus_(B(i), C(i));
-//  A.setAssembleWhileCompute(true);
-//  A.compile();
-//  A.compute();
-//
-//  result(i) = copy(A(i));
-//  result.setAssembleWhileCompute(true);
-//  result.compile();
-//  result.compute();
-//
-//  Tensor<double> A_("dA", {11},   dv, 0);
-//  Tensor<double> B_("dB", {11},   dv, 0);
-//  Tensor<double> C_("dC", {11},   dv, 0);
-//
-//  B_(i) = copy(B(i));
-//  B_.setAssembleWhileCompute(true);
-//  B_.compile();
-//  B_.compute();
-//
-//  C_(i) = copy(C(i));
-//  C_.setAssembleWhileCompute(true);
-//  C_.compile();
-//  C_.compute();
-//
-//  A_(i) = B_(i) + C_(i);
-//
-//  A_.setAssembleWhileCompute(true);
-//  A_.compile();
-//  A_.compute();
-//
-//  std::cout << B << std::endl;
-//  std::cout << C << std::endl << std::endl;
-//
-//  std::cout << B_ << std::endl;
-//  std::cout << C_ << std::endl << std::endl;
-//
-//  std::cout << A << std::endl;
-//  std::cout << A_ << std::endl;
-//  std::cout << result << std::endl;
-//}
+int test_mixed_two_three() {
+  Func copy = getCopyFunc();
+  Func plus_ = getPlusFunc();
+
+  Tensor<double> A("A", {11}, lz77f, 0);
+  Tensor<double> B = lz77_two_repeat("B", 1,2);
+  Tensor<double> C = lz77_three_repeat("C", 3,4,5);
+  Tensor<double> result("result", {11}, dv, 0);
+
+  std::cout << B << std::endl;
+  std::cout << C << std::endl << std::endl;
+
+  A(i) = plus_(B(i), C(i));
+  A.setAssembleWhileCompute(true);
+  A.compile();
+  A.compute();
+
+  std::cout << A << std::endl;
+
+  result(i) = copy(A(i));
+  result.setAssembleWhileCompute(true);
+  result.compile();
+  result.compute();
+
+  Tensor<double> A_("dA", {11},   dv, 0);
+  Tensor<double> B_("dB", {11},   dv, 0);
+  Tensor<double> C_("dC", {11},   dv, 0);
+
+  B_(i) = copy(B(i));
+  B_.setAssembleWhileCompute(true);
+  B_.compile();
+  B_.compute();
+
+  C_(i) = copy(C(i));
+  C_.setAssembleWhileCompute(true);
+  C_.compile();
+  C_.compute();
+
+  A_(i) = B_(i) + C_(i);
+
+  A_.setAssembleWhileCompute(true);
+  A_.compile();
+  A_.compute();
+
+  std::cout << B << std::endl;
+  std::cout << C << std::endl << std::endl;
+
+  std::cout << B_ << std::endl;
+  std::cout << C_ << std::endl << std::endl;
+
+  std::cout << A << std::endl;
+  std::cout << A_ << std::endl;
+  std::cout << result << std::endl;
+  return 0;
+}
+
+int test_mixed() {
+  Func copy = getCopyFunc();
+  Func plus_ = getPlusFunc();
+
+  Tensor<double> A("A", {11}, lz77f, 0);
+  Tensor<double> B = lz77_repeat_twice("B", 1,2);
+  Tensor<double> C = lz77_three_repeat("C", 3,4,5);
+  Tensor<double> result("result", {11}, dv, 0);
+
+  A(i) = plus_(B(i), C(i));
+  A.setAssembleWhileCompute(true);
+  A.compile();
+  A.compute();
+
+  result(i) = copy(A(i));
+  result.setAssembleWhileCompute(true);
+  result.compile();
+  result.compute();
+
+  Tensor<double> A_("dA", {11},   dv, 0);
+  Tensor<double> B_("dB", {11},   dv, 0);
+  Tensor<double> C_("dC", {11},   dv, 0);
+
+  B_(i) = copy(B(i));
+  B_.setAssembleWhileCompute(true);
+  B_.compile();
+  B_.compute();
+
+  C_(i) = copy(C(i));
+  C_.setAssembleWhileCompute(true);
+  C_.compile();
+  C_.compute();
+
+  A_(i) = B_(i) + C_(i);
+
+  A_.setAssembleWhileCompute(true);
+  A_.compile();
+  A_.compute();
+
+  std::cout << B << std::endl;
+  std::cout << C << std::endl << std::endl;
+
+  std::cout << B_ << std::endl;
+  std::cout << C_ << std::endl << std::endl;
+
+  std::cout << A << std::endl;
+  std::cout << A_ << std::endl;
+  std::cout << result << std::endl;
+  return 0;
+}
+
+void test_repeat_two_csr() {
+  Func copy = getCopyFunc();
+  Func plus_ = getPlusFunc();
+
+  Tensor<double> A("A", {11}, lz77f, 0);
+  Tensor<double> B = lz77_two_repeat("B", 1,2);
+  Tensor<double> C("C", {11}, {Compressed}, 0);
+  Tensor<double> result("result", {11}, dv, 0);
+
+  C(0) = 1;
+  C(5) = 2;
+  C(9) = 5;
+  C(10) = 0;
+
+  A(i) = plus_(B(i), C(i));
+  A.setAssembleWhileCompute(true);
+  A.compile();
+  A.compute();
+
+  result(i) = copy(A(i));
+  result.setAssembleWhileCompute(true);
+  result.compile();
+  result.compute();
+
+  Tensor<double> A_("dA", {11},   dv, 0);
+  Tensor<double> B_("dB", {11},   dv, 0);
+  Tensor<double> C_("dC", {11},   dv, 0);
+
+  B_(i) = copy(B(i));
+  B_.setAssembleWhileCompute(true);
+  B_.compile();
+  B_.compute();
+
+  C_(i) = copy(C(i));
+  C_.setAssembleWhileCompute(true);
+  C_.compile();
+  C_.compute();
+
+  A_(i) = B_(i) + C_(i);
+
+  A_.setAssembleWhileCompute(true);
+  A_.compile();
+  A_.compute();
+
+  std::cout << B << std::endl;
+  std::cout << C << std::endl << std::endl;
+
+  std::cout << B_ << std::endl;
+  std::cout << C_ << std::endl << std::endl;
+
+  std::cout << A << std::endl;
+  std::cout << A_ << std::endl;
+  std::cout << result << std::endl;
+}
 
 int main() {
 //  test_zeros();
-  test_one_rle();
+//  test_one_rle();
 //  test_repeat_two();
 //  test_mixed_two_three();
 //  test_mixed();
-//  test_repeat_two_csr();
+  test_repeat_two_csr();
   return 0;
 }

@@ -350,9 +350,10 @@ Stmt Iterator::getInsertFinalizeLevel(const Expr& szPrev, const Expr& sz) const{
                                                               getMode());
 }
 
-Stmt Iterator::getAppendCoord(const Expr& p, const Expr& i) const {
+Stmt Iterator::getAppendCoord(const Expr& p, const Expr& i, const Expr& values,
+                              const Expr& valuesCap, const Datatype& type) const {
   taco_iassert(defined() && content->mode.defined());
-  return content->mode.getModeFormat().impl->getAppendCoord(p, i, content->mode);
+  return content->mode.getModeFormat().impl->getAppendCoord(p, i, values, valuesCap, type, content->mode);
 }
 
 Stmt Iterator::getAppendEdges(const Expr& pPrev, const Expr& pBegin, 
@@ -446,9 +447,11 @@ ModeFunction Iterator::getFillRegion(const ir::Expr& pos, const std::vector<ir::
 
 Stmt Iterator::getFillRegionAppend(const ir::Expr& p, const ir::Expr& i,
                                    const ir::Expr& start, const ir::Expr& length,
-                                   const ir::Expr& run) const {
+                                   const ir::Expr& run, const ir::Expr& values,
+                                   const Datatype& type) const {
   taco_iassert(defined() && content->mode.defined());
-  return getMode().getModeFormat().impl->getFillRegionAppend(p,i,start,length,run, getMode());
+  return getMode().getModeFormat().impl->getFillRegionAppend(p, i, start, length, run,
+                                                             values, type, getMode());
 }
 
 

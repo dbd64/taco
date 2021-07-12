@@ -23,7 +23,7 @@ namespace taco {
             ModeFormatImpl("lz77", isFull, isOrdered, isUnique, false, true,
                            isZeroless, false, true, false, false,
                            true, false, false, false, true,
-                           false, taco_positer_kind::BYTE,
+                           true, taco_positer_kind::BYTE,
                            false),
             allocSize(allocSize) {
     }
@@ -93,6 +93,10 @@ namespace taco {
       return BinOp::make(lhs, rhs, " >> ");
     }
 
+    Expr msbCheck(ir::Expr values, ir::Expr pos, int bitnum, int value){
+      return Eq::make(BitAnd::make(RightShift_make(Load::make(values, pos), bitnum), 1), value);
+    }
+
     ModeFunction LZ77ModeFormat::posIterAccess(ir::Expr pos,
                                                std::vector<ir::Expr> coords,
                                                ir::Expr values, Datatype type,
@@ -103,10 +107,10 @@ namespace taco {
 //      10  XXXXXX -> start value at next byte
 //      11  XXXXXX -> next two bytes are distance, next two bytes are run [b0,b1,b2,b3]
 
-      Expr msb0Check = Eq::make(BitAnd::make(RightShift_make(Load::make(values, pos), 7), 1), 0);
-      Expr msb10Check = Eq::make(BitAnd::make(RightShift_make(Load::make(values, pos), 6), 1), 0);
-      Expr msb11Check = Eq::make(BitAnd::make(RightShift_make(Load::make(values, pos), 6), 1), 1);
-      Expr found = Var::make("found", Bool);
+      Expr msb0Check = msbCheck(values, pos, 7, 0);
+      Expr msb10Check = msbCheck(values, pos, 6, 0);
+      Expr msb11Check = msbCheck(values, pos, 6, 1);
+      Expr found = getFoundVar(mode);
       Expr distVar = Var::make("dist", Int());
       Expr runVar = Var::make("run", Int());
       Expr regionPointer = Var::make("region_pointer", Int());
@@ -124,7 +128,7 @@ namespace taco {
               Assign::make(found, false),
               Assign::make(distVar, Load::make(ir::Cast::make(Load::make(values, ir::Add::make(pos, 1), true), UInt16, true))),
               Assign::make(runVar, Load::make(ir::Cast::make(Load::make(values, ir::Add::make(pos, 3), true), UInt16, true))),
-              addAssign(pos,5), addAssign(getCoordVar(mode), runVar), Assign::make(posAccessCoord, -1)
+              addAssign(pos,5), addAssign(getCoordVar(mode), runVar) /*, Assign::make(posAccessCoord, -1)*/
       );
 
       auto fillRegion = Load::make(values, ir::Sub::make(ir::Sub::make(pos, 5), ir::Mul::make(distVar, type.getNumBytes())), true);
@@ -170,12 +174,29 @@ namespace taco {
 //      return ModeFunction(blk, {startPos, length, run, updateFill});
 //    }
 
-    Stmt LZ77ModeFormat::getAppendCoord(Expr p, Expr i, Mode mode) const {
+    Expr varFromCast(Expr var){
+      if(var.as<ir::Cast>()){
+        return var.as<ir::Cast>()->a;
+      }
+      taco_unreachable;
+      return Expr();
+    }
+
+    Stmt LZ77ModeFormat::getAppendCoord(Expr p, Expr i, Expr values, Expr valuesCap, Datatype type, Mode mode) const {
       taco_iassert(mode.getPackLocation() == 0);
       Expr stride = (int)mode.getModePack().getNumModes();
       Expr idx = ir::Mul::make(p, stride);
 
-      return Block::make();
+      auto addr = Load::make(values, p, true);
+      auto currValue = Load::make(ir::Cast::make(addr, type, true));
+
+      auto storeAddrByte = Load::make(values, ir::Add::make(p,1), true);
+      auto storeAddr = ir::Cast::make(storeAddrByte, type, true);
+
+      return Block::make(Comment::make("Append Coord!"),
+              IfThenElse::make(msbCheck(values, p, 7, 1),
+                       Block::make(doubleSizeIfFull(varFromCast(values), valuesCap, ir::Add::make(p,1)),
+                                   Store::make(storeAddr, 0, currValue))));
     }
 
     Stmt LZ77ModeFormat::getAppendEdges(Expr pPrev, Expr pBegin, Expr pEnd,
@@ -262,10 +283,11 @@ namespace taco {
       return Block::make({initCs, finalizeLoop});
     }
 
-//    Stmt
-//    LZ77ModeFormat::getFillRegionAppend(ir::Expr p, ir::Expr i,
-//                                        ir::Expr start, ir::Expr length,
-//                                        ir::Expr run, Mode mode) const {
+    Stmt
+    LZ77ModeFormat::getFillRegionAppend(ir::Expr p, ir::Expr i,
+                                        ir::Expr start, ir::Expr length,
+                                        ir::Expr run, ir::Expr values,
+                                        Datatype type, Mode mode) const {
 //      Expr distArray = getDistArray(mode.getModePack());
 //      Expr stride = (int)mode.getModePack().getNumModes();
 //      Expr distValue = ir::Sub::make(p, start);
@@ -275,7 +297,28 @@ namespace taco {
 //      Stmt storeRun = Store::make(runArray, ir::Mul::make(p, stride), run);
 //
 //      return Block::make(storeDist, storeRun);
-//    }
+
+//      11  XXXXXX -> next two bytes are distance, next two bytes are run [b0,b1,b2,b3]
+
+      // store 192 [p]
+      // store dist [p+1] (2 bytes)
+      // store run  [p+3] (2 bytes)
+      // set p+=5
+
+      Expr distValue = ir::Div::make(ir::Sub::make(p, start), type.getNumBytes());
+
+      auto storeCode = ir::Store::make(values, p, 192);
+
+      auto distAddrByte = Load::make(values, ir::Add::make(p,1), true);
+      auto distAddrShort = ir::Cast::make(distAddrByte, UInt16, true);
+      auto storeDist = ir::Store::make(distAddrShort, 0, distValue);
+
+      auto runAddrByte = Load::make(values, ir::Add::make(p,3), true);
+      auto runAddrShort = ir::Cast::make(runAddrByte, UInt16, true);
+      auto storeRun = ir::Store::make(runAddrShort, 0, run);
+
+      return Block::make(storeCode, storeDist, storeRun, addAssign(p,5));
+    }
 
     vector<Expr> LZ77ModeFormat::getArrays(Expr tensor, int mode,
                                                     int level) const {
@@ -306,6 +349,18 @@ namespace taco {
 
       if (!mode.hasVar(varName)) {
         Expr idxCapacity = Var::make(varName, Int());
+        mode.addVar(varName, idxCapacity);
+        return idxCapacity;
+      }
+
+      return mode.getVar(varName);
+    }
+
+    Expr LZ77ModeFormat::getFoundVar(Mode mode) const {
+      const std::string varName = mode.getName() + "_found";
+
+      if (!mode.hasVar(varName)) {
+        Expr idxCapacity = Var::make(varName, Bool);
         mode.addVar(varName, idxCapacity);
         return idxCapacity;
       }

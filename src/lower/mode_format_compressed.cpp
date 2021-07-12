@@ -107,7 +107,9 @@ ModeFunction CompressedModeFormat::posIterAccess(ir::Expr pos,
   return ModeFunction(Stmt(), {idx, true});
 }
 
-Stmt CompressedModeFormat::getAppendCoord(Expr p, Expr i, Mode mode) const {
+Stmt CompressedModeFormat::getAppendCoord(Expr p, Expr i,
+                                          ir::Expr values, ir::Expr valuesCap,
+                                          Datatype type, Mode mode) const {
   taco_iassert(mode.getPackLocation() == 0);
 
   Expr idxArray = getCoordArray(mode.getModePack());

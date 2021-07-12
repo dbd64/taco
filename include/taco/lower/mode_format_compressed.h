@@ -28,10 +28,11 @@ public:
                                      Mode mode) const override;
 
   ModeFunction coordBounds(ir::Expr parentPos, Mode mode) const override;
-  
-  ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord, 
-                          Mode mode) const override;
-  ir::Stmt getAppendEdges(ir::Expr parentPos, ir::Expr posBegin, 
+
+  ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord,
+                          ir::Expr values, ir::Expr valuesCap,
+                          Datatype type, Mode mode) const override;
+  ir::Stmt getAppendEdges(ir::Expr parentPos, ir::Expr posBegin,
                           ir::Expr posEnd, Mode mode) const override;
   ir::Expr getSize(ir::Expr parentSize, Mode mode) const override;
   ir::Stmt getAppendInitEdges(ir::Expr parentPosBegin, 

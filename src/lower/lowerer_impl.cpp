@@ -533,7 +533,16 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
 
     if (needComputeAssign && values.defined()) {
       if (!assignment.getOperator().defined()) {
-        computeStmt = Store::make(values, loc, rhs);
+        //TODO: DANIELBD
+        if (getIterators(assignment.getLhs()).back().getPosIterKind() == taco_positer_kind::BYTE){
+          auto charVals = ir::Cast::make(values, UInt8, true);
+          auto addr = Load::make(charVals, loc, true);
+          auto lhs = ir::Cast::make(addr, assignment.getLhs().getDataType(), true);
+
+          computeStmt = Store::make(lhs, 0, rhs);
+        } else {
+          computeStmt = Store::make(values, loc, rhs);
+        }
       }
       else {
         if (isa<taco::Add>(assignment.getOperator())) {
@@ -1873,6 +1882,19 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
 
       // Construct case expression
       vector<Expr> coordComparisons = compareToResolvedCoordinate<Eq>(point.rangers(), coordinate, coordinateVar);
+
+      for (auto& ranger : point.rangers()){
+        if(ranger.getTensor().defined()) {
+          Expr values = getValuesArrayFromIterator(ranger);
+          auto posAccess = ranger.posAccess(ranger.getPosVar(), coordinates(ranger),
+                                            values, tensorTypes[ranger.getTensor()].getDataType());
+          // TODO : Should check literal value but it
+          if (posAccess[1].as<ir::Literal>() == nullptr) {
+            coordComparisons.push_back(posAccess[1]); // Need to check that the coordinate has been found also
+          }
+        }
+      }
+
       vector<Iterator> omittedRegionIterators = loopLattice.retrieveRegionIteratorsToOmit(point);
       if (!point.isOmitter()) {
         std::vector <Expr> neqComparisons = compareToResolvedCoordinate<Neq>(omittedRegionIterators, coordinate,
@@ -1884,7 +1906,6 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
 
       // Construct case body
       IndexStmt zeroedStmt = zero(stmt, getExhaustedAccesses(point, loopLattice));
-//      std::cout << "[lowerMergeCases] zeroedStmt: " << zeroedStmt << std::endl;
       Stmt body = lowerForallBody(coordinate, zeroedStmt, {},
                                   inserters, appenders, MergeLattice({point}), reducedAccesses);
 
@@ -1892,9 +1913,7 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
       if (fillsResult.first) {
         vector<Stmt> whileBodyStmts;
         whileBodyStmts.push_back(body);
-//        std::cout << "[lowerMergeCases] point: " << point << std::endl;
         for (auto &iterator : allIterators) {
-//          std::cout << "[lowerMergeCases] iterator: " << iterator << std::endl;
           if (iterator.updatesFillRegion()) {
             auto fillVars = getFillRegionVars(iterator.getTensor());
             auto lengthVar = fillVars[0];
@@ -1922,24 +1941,31 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
           }
           whileBodyStmts.push_back(addAssign(coordinate, 1));
 
-          auto ifCond = Lt::make(ir::Sub::make(Min::make(coordVars), coordinate), Lcm::make(lengths));
+          auto lcmLengths = Var::make("lengthsLcm", Int());
+          auto lcmDecl = VarDecl::make(lcmLengths, Lcm::make(lengths));
+          auto minCoords = Var::make("coordMin", Int());
+          auto minDecl = VarDecl::make(minCoords, Min::make(coordVars));
 
-          auto whileCond = Lt::make(coordinate, Min::make(coordVars));
+          auto ifCond = Lte::make(ir::Sub::make(minCoords, coordinate), lcmLengths);
+
+          auto whileCond = Lt::make(coordinate, minCoords);
           auto whileLoop = While::make(whileCond, Block::make(whileBodyStmts));
 
           Expr startVar = Var::make("startVar", Int());
           Stmt startDecl = VarDecl::make(startVar, appender.getPosVar());
           Expr loopBound = Var::make("loopBound", Int());
-          Stmt loopBoundDecl = VarDecl::make(loopBound, ir::Add::make(coordinate, Lcm::make(lengths)));
+          Stmt loopBoundDecl = VarDecl::make(loopBound, ir::Add::make(coordinate, lcmLengths));
           auto elseLoop = While::make(
                   Lt::make(coordinate, loopBound),
                   Block::make(whileBodyStmts));
-          Expr length = Lcm::make(lengths);
+          Expr length = lcmLengths;
           Expr run = Var::make("runValue", Int());
-          Stmt runDecl = VarDecl::make(run, ir::Sub::make(Min::make(coordVars), coordinate));
-          auto appendFill = appender.getFillRegionAppend(ir::Sub::make(appender.getPosVar(),1), coordinate,
-                                                         ir::Sub::make(startVar, 1), length, run);
-          Stmt coordFixup = Assign::make(coordinate, Min::make(coordVars));
+          Stmt runDecl = VarDecl::make(run, ir::Sub::make(minCoords, coordinate));
+          Expr values = getValuesArrayFromIterator(appender);
+          auto appendFill = appender.getFillRegionAppend(appender.getPosVar(), coordinate,
+                                                         startVar, length, run,
+                                                         values, tensorTypes[appender.getTensor()].getDataType());
+          Stmt coordFixup = Assign::make(coordinate, minCoords);
 
           vector<Stmt> fillsFixupVec;
           for (auto &iterator : allIterators) {
@@ -1967,8 +1993,9 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
 
           Stmt incIterators = codeToIncIteratorVars(coordinate, coordinateVar, filtered, {});
 
-          body = IfThenElse::make(ifCond, body,
-                                  Block::make(loopBoundDecl, startDecl, elseLoop, runDecl, appendFill, fillsFixup, incIterators, coordFixup, Continue::make()));
+          body = Block::make(lcmDecl, minDecl,
+                             IfThenElse::make(ifCond, Block::make(whileLoop, Continue::make()),
+                                  Block::make(loopBoundDecl, startDecl, elseLoop, runDecl, appendFill, fillsFixup, incIterators, coordFixup, Continue::make())));
         }
       }
 
@@ -1978,10 +2005,8 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexVar coordinateVar, I
         result.push_back(body);
         break;
       }
-//      std::cout << taco::ir::conjunction(coordComparisons) << std::endl << body << std::endl;
       cases.push_back({taco::ir::conjunction(coordComparisons), body});
     }
-//    std::cout << Case::make(cases, loopLattice.exact()) << std::endl;
     result.push_back(Case::make(cases, loopLattice.exact()));
   }
 
@@ -3182,7 +3207,8 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
       }
 
       // Pre-allocate memory for the value array if computing while assembling
-      if (generateComputeCode()) {
+      if (generateComputeCode())
+      {
         taco_iassert(!iterators.empty());
 
         Expr capacityVar = getCapacityVar(tensor);
@@ -3191,6 +3217,13 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
         initArrays.push_back(VarDecl::make(capacityVar, allocSize));
         initArrays.push_back(Allocate::make(valuesArr, capacityVar, false /* is_realloc */, Expr() /* old_elements */,
                                             clearValuesAllocation));
+      } else if (generateAssembleCode()){
+        taco_iassert(!iterators.empty());
+
+        Expr capacityVar = getCapacityVar(tensor);
+        Expr allocSize = isValue(parentSize, 0)
+                         ? DEFAULT_ALLOC_SIZE : parentSize;
+        initArrays.push_back(VarDecl::make(capacityVar, allocSize));
       }
 
       taco_iassert(!initArrays.empty());
@@ -3771,6 +3804,18 @@ Stmt LowererImpl::codeToIncIteratorVars(Expr coordinate, IndexVar coordinateVar,
                          : ir::Cast::make(Eq::make(iterator.getCoordVar(),
                                                    coordinate),
                                           ivar.type());
+
+        if(iterator.getTensor().defined()) {
+          Expr values = getValuesArrayFromIterator(iterator);
+          auto posAccess = iterator.posAccess(iterator.getPosVar(), coordinates(iterator),
+                                              values, tensorTypes[iterator.getTensor()].getDataType());
+          if (posAccess[1].as<ir::Literal>() == nullptr) {
+            increment =  ir::Cast::make(ir::And::make(Eq::make(iterator.getCoordVar(), coordinate),
+                                                      posAccess[1]), ivar.type()); // Need to check that the coordinate has been found also
+          }
+        }
+
+
         result.push_back(addAssign(ivar, ir::Mul::make(increment, incrementVal)));
       }
     } else if (!iterator.isLeaf()) {
@@ -3801,15 +3846,8 @@ Stmt LowererImpl::codeToIncIteratorVars(Expr coordinate, IndexVar coordinateVar,
 Stmt LowererImpl::codeToUpdateFills(Expr coordinate, IndexVar coordinateVar, vector<Iterator> iterators, vector<Iterator> mergers) {
   vector<Stmt> result;
 
-//  std::cout << "COORDINATE "<< coordinate << std::endl;
-//  for (auto& merger : mergers) {
-//    std::cout << "merger: " <<  merger << std::endl;
-//    std::cout << "merger.getChild(): " << merger.getChild() << std::endl;
-//    std::cout << "merger.isRoot(): " << merger.isRoot() << std::endl;
-//  }
 
   for (auto& iterator : iterators) {
-//    std::cout << iterator << std::endl;
     if(iterator.updatesFillRegion()){
 //      auto f = iterator.getFillRegion(iterator.getPosVar(), coordinates(iterator));
 //      Expr values_ = getValuesArrayFromIterator(iterator);
@@ -3888,9 +3926,9 @@ Stmt LowererImpl::codeToLoadCoordinatesFromPosIterators(vector<Iterator> iterato
 
         auto body = Block::make(
                 Assign::make(lengthVar, length),
-                Assign::make(indexVar, 0),
+                Assign::make(indexVar, ir::Rem::make(1, lengthVar)),
                 Assign::make(fillRegion, fillRegionReplacement),
-                Assign::make(fillVariable, Load::make(fillRegion, indexVar)));
+                Assign::make(fillVariable, Load::make(fillRegion, 0)));
         loadPosIterCoordinateStmts.push_back(IfThenElse::make(updateFill, body));
       }
 //      if (!(ir::isa<ir::Literal>(coordFound) && ir::to<ir::Literal>(coordFound)->getBoolValue()))
@@ -3964,7 +4002,9 @@ Stmt LowererImpl::appendCoordinate(vector<Iterator> appenders, Expr coord) {
     vector<Stmt> appendStmts;
 
     if (generateAssembleCode()) {
-      appendStmts.push_back(appender.getAppendCoord(pos, coord));
+      Expr values = getValuesArrayFromIterator(appender);
+      appendStmts.push_back(appender.getAppendCoord(pos, coord, values, getCapacityVar(appender.getTensor()),
+                                                    tensorTypes[appender.getTensor()].getDataType()));
       while (!appender.isRoot() && appender.isBranchless()) {
         // Need to append result coordinate to parent level as well if child
         // level is branchless (so child coordinates will have unique parents).
@@ -3975,14 +4015,17 @@ Stmt LowererImpl::appendCoordinate(vector<Iterator> appenders, Expr coord) {
           taco_iassert(!appender.isUnique()) << "Need to be able to insert "
               << "duplicate coordinates to level, but level is declared unique";
 
-          Expr coord = getCoordinateVar(appender);
-          appendStmts.push_back(appender.getAppendCoord(pos, coord));
+          appendStmts.push_back(appender.getAppendCoord(pos, coord, values, getCapacityVar(appender.getTensor()),
+                                                        tensorTypes[appender.getTensor()].getDataType()));
         }
       }
     }
 
     if (generateAssembleCode() || isLastAppender(appender)) {
-      appendStmts.push_back(addAssign(pos, 1));
+      Datatype type = tensorTypes[appender.getTensor()].getDataType();
+      int increment = appender.getPosIterKind() == taco_positer_kind::BYTE ? type.getNumBytes() : 1;
+
+      appendStmts.push_back(addAssign(pos, increment));
 
       Stmt appendCode = Block::make(appendStmts);
       if (appenderChild.defined() && appenderChild.hasAppend()) {

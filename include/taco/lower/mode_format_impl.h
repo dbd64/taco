@@ -184,7 +184,7 @@ public:
   /// Level functions that implement append capabilitiy.
   /// @{
   virtual ir::Stmt
-  getAppendCoord(ir::Expr p, ir::Expr i, Mode mode) const;
+  getAppendCoord(ir::Expr p, ir::Expr i, ir::Expr values, ir::Expr valuesCapacity, Datatype type, Mode mode) const;
 
   virtual ir::Stmt
   getAppendEdges(ir::Expr pPrev, ir::Expr pBegin, ir::Expr pEnd,
@@ -246,7 +246,8 @@ public:
   virtual ir::Stmt
   getFillRegionAppend(ir::Expr p, ir::Expr i,
                       ir::Expr start, ir::Expr length,
-                      ir::Expr run, Mode mode) const;
+                      ir::Expr run, ir::Expr values,
+                      Datatype type, Mode mode) const;
   /// @}
 
   /// Returns arrays associated with a tensor mode

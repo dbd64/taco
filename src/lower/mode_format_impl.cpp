@@ -232,6 +232,7 @@ Stmt ModeFormatImpl::getInsertFinalizeLevel(Expr szPrev,
 }
 
 Stmt ModeFormatImpl::getAppendCoord(Expr p, Expr i,
+    ir::Expr values, ir::Expr valuesCap, Datatype type,
     Mode mode) const {
   return Stmt();
 }
@@ -305,7 +306,8 @@ ModeFormatImpl::getFillRegion(ir::Expr pos, std::vector<ir::Expr> coords, Mode m
 Stmt
 ModeFormatImpl::getFillRegionAppend(ir::Expr p, ir::Expr i,
                     ir::Expr start, ir::Expr length,
-                    ir::Expr run, Mode mode) const {
+                    ir::Expr run, ir::Expr values,
+                    Datatype type, Mode mode) const {
   return Stmt();
 }
 

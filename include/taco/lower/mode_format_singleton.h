@@ -21,8 +21,9 @@ public:
   ModeFunction posIterAccess(ir::Expr pos, std::vector<ir::Expr> coords, ir::Expr values, Datatype type,
                              Mode mode) const override;
   
-  ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord, 
-                          Mode mode) const override; 
+  ir::Stmt getAppendCoord(ir::Expr pos, ir::Expr coord,
+                          ir::Expr values, ir::Expr valuesCap,
+                          Datatype type, Mode mode) const override;
   ir::Expr getSize(ir::Expr parentSize, Mode mode) const override;
   ir::Stmt getAppendInitLevel(ir::Expr parentSize, ir::Expr size, 
                               Mode mode) const override;
